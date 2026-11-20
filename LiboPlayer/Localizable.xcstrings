@@ -1,0 +1,183 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@×" : {
+
+    },
+    "All" : {
+
+    },
+    "Audio is currently unavailable for this episode." : {
+
+    },
+    "Browse Shows" : {
+
+    },
+    "Close" : {
+
+    },
+    "Couldn’t Load Episodes" : {
+
+    },
+    "Couldn’t Search Episodes" : {
+
+    },
+    "Couldn’t load Libo/Libo. Check your connection and try again." : {
+
+    },
+    "Couldn’t load the next episode." : {
+
+    },
+    "Couldn’t play the audio. Check your connection and try again." : {
+
+    },
+    "Couldn’t start this episode. Try again." : {
+
+    },
+    "Couldn’t update the listening status. Try again." : {
+
+    },
+    "Couldn’t update your followed shows. Refresh the catalog and try again." : {
+
+    },
+    "Done" : {
+
+    },
+    "Enter at least 3 characters." : {
+
+    },
+    "Filter episodes" : {
+
+    },
+    "Follow Show" : {
+
+    },
+    "Libo/Libo" : {
+
+    },
+    "Libo/Libo Account" : {
+
+    },
+    "Listening status" : {
+
+    },
+    "Load Shows" : {
+
+    },
+    "Loading episodes…" : {
+
+    },
+    "Loading shows…" : {
+
+    },
+    "Mark as Played" : {
+
+    },
+    "Mark as Unplayed" : {
+
+    },
+    "Minimize player" : {
+
+    },
+    "My Episodes" : {
+
+    },
+    "No Episodes Yet" : {
+
+    },
+    "No Episodes in Your Followed Shows" : {
+
+    },
+    "No Followed Shows" : {
+
+    },
+    "No Matching Episodes" : {
+
+    },
+    "Open player" : {
+
+    },
+    "Pause" : {
+
+    },
+    "Play" : {
+
+    },
+    "Playback position" : {
+
+    },
+    "Playback speed" : {
+
+    },
+    "Played" : {
+
+    },
+    "Retry Loading Episodes" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search All Episodes" : {
+
+    },
+    "Search all shows’ episodes" : {
+
+    },
+    "Search episode titles" : {
+
+    },
+    "Search show titles" : {
+
+    },
+    "Searching…" : {
+
+    },
+    "Shows" : {
+
+    },
+    "Sign in to see episodes from the shows you follow." : {
+
+    },
+    "Sign in with Telegram" : {
+
+    },
+    "Sign in with Telegram to confirm your account." : {
+
+    },
+    "Skip back 15 seconds" : {
+
+    },
+    "Skip forward 30 seconds" : {
+
+    },
+    "Subscription required" : {
+
+    },
+    "This episode requires a Libo/Libo subscription." : {
+
+    },
+    "Try Again" : {
+
+    },
+    "Try another title or listening status." : {
+
+    },
+    "Unfollow Show" : {
+
+    },
+    "Unplayed" : {
+
+    },
+    "Untitled Episode" : {
+
+    },
+    "· %lld min" : {
+
+    },
+    "· %lld min left" : {
+
+    }
+  },
+  "version" : "1.0"
+}
