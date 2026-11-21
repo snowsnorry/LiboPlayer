@@ -17,7 +17,7 @@ struct LibraryScreen: View {
     @State private var tab = LibraryTab.shows
     @State private var path: [Show] = []
     @State private var login = false
-    @State private var archiveError = false
+    @State private var archiveError: String?
     @State private var archiveRetry = 0
     @State private var showSearch = ""
     @State private var catalogSearch = ""
@@ -27,9 +27,9 @@ struct LibraryScreen: View {
         tabsWithPlayer
             .task { if !library.ready { await library.refresh() } }
             .task(id: ArchiveKey(session: ObjectIdentifier(library.session), shows: library.subscriptions.keys.sorted(), retry: archiveRetry)) {
-                archiveError = false
+                archiveError = nil
                 do { try await library.loadArchive() }
-                catch { if !Task.isCancelled { archiveError = true } }
+                catch { if !Task.isCancelled { archiveError = LibraryError.message(for: error) } }
             }
             .onChange(of: library.account) { _, id in player.useAccount(id) }
             .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
@@ -165,8 +165,9 @@ struct LibraryScreen: View {
         } else {
             ZStack {
                 if !library.ready { catalogLoading }
-                else if archiveError {
-                    ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "wifi.exclamationmark") }
+                else if let archiveError {
+                    ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "exclamationmark.circle") }
+                        description: { Text(archiveError) }
                         actions: { Button("Try Again") { archiveRetry += 1 } }
                 } else if !library.archiveReady {
                     ProgressView("Loading episodes…")
@@ -189,7 +190,7 @@ private struct ShowScreen: View {
     @Environment(PodcastLibrary.self) private var library
     let show: Show
     let signIn: () -> Void
-    @State private var loadFailed = false
+    @State private var loadError: String?
     @State private var retry = 0
     @State private var episodeQuery = EpisodeQuery()
     var body: some View {
@@ -197,7 +198,11 @@ private struct ShowScreen: View {
             if let rows = library.episodes[show.id] {
                 if rows.isEmpty { ContentUnavailableView("No Episodes Yet", systemImage: "waveform") }
                 else { EpisodeList(episodes: rows, source: .show(show.id), query: $episodeQuery) }
-            } else if loadFailed { Button("Retry Loading Episodes") { retry += 1 } }
+            } else if let loadError {
+                ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "exclamationmark.circle") }
+                    description: { Text(loadError) }
+                    actions: { Button("Retry Loading Episodes") { retry += 1 } }
+            }
             else { ProgressView("Loading episodes…") }
         }
         .searchable(text: $episodeQuery.title, placement: .navigationBarDrawer(displayMode: .always),
@@ -217,9 +222,9 @@ private struct ShowScreen: View {
             }
         }
         .task(id: "\(ObjectIdentifier(library.session))-\(retry)") {
-            loadFailed = false
+            loadError = nil
             do { try await library.load(show) }
-            catch { if !Task.isCancelled { loadFailed = true } }
+            catch { if !Task.isCancelled { loadError = LibraryError.message(for: error) } }
         }
     }
 }

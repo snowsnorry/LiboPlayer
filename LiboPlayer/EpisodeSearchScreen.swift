@@ -4,7 +4,7 @@ struct EpisodeSearchScreen: View {
     @Environment(PodcastLibrary.self) private var library
     @Binding var query: String
     @State private var retry = 0
-    @State private var response: (request: Request, episodes: [Episode]?)?
+    @State private var response: (request: Request, result: Result<[Episode], Error>)?
 
     private struct Request: Equatable {
         let term: String
@@ -17,7 +17,7 @@ struct EpisodeSearchScreen: View {
         let request = Request(term: query.trimmingCharacters(in: .whitespacesAndNewlines),
                               session: ObjectIdentifier(session), retry: retry)
         List {
-            if response?.request == request, let episodes = response?.episodes {
+            if response?.request == request, case let .success(episodes) = response?.result {
                 ForEach(episodes) { episode in
                     EpisodeListRow(episode: episode, source: .show(episode.showID), showsPodcastName: true)
                 }
@@ -30,10 +30,11 @@ struct EpisodeSearchScreen: View {
                                        description: Text("Enter at least 3 characters."))
             } else if response?.request != request {
                 ProgressView("Searching…")
-            } else if let episodes = response?.episodes {
+            } else if case let .success(episodes) = response?.result {
                 if episodes.isEmpty { ContentUnavailableView.search(text: request.term) }
-            } else {
-                ContentUnavailableView { Label("Couldn’t Search Episodes", systemImage: "wifi.exclamationmark") }
+            } else if case let .failure(error) = response?.result {
+                ContentUnavailableView { Label("Couldn’t Search Episodes", systemImage: "exclamationmark.circle") }
+                    description: { Text(LibraryError.message(for: error)) }
                     actions: { Button("Try Again") { retry += 1 } }
             }
         }
@@ -43,11 +44,13 @@ struct EpisodeSearchScreen: View {
             guard request.term.count >= 3 else { return }
             do {
                 try await Task.sleep(for: .milliseconds(300))
-                let episodes = try await session.searchEpisodes(request.term)
+                let source = try await library.sessionForRequest()
                 try Task.checkCancellation()
-                response = (request, episodes)
+                let episodes = try await source.searchEpisodes(request.term)
+                try Task.checkCancellation()
+                response = (request, .success(episodes))
             } catch {
-                if !Task.isCancelled { response = (request, nil) }
+                if !Task.isCancelled { response = (request, .failure(error)) }
             }
         }
     }

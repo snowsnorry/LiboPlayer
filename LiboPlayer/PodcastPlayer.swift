@@ -119,7 +119,9 @@ final class PodcastPlayer {
         loading = true
         loadTask = Task {
             do {
-                let url = try await library.session.stream(for: episode)
+                let url: URL
+                if let streamURL = episode.streamURL { url = streamURL }
+                else { url = try await library.sessionForRequest().stream(for: episode) }
                 try Task.checkCancellation()
                 let audio = AVAudioSession.sharedInstance()
                 try audio.setCategory(.playback, mode: .spokenAudio)

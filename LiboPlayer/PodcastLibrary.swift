@@ -11,7 +11,8 @@ final class PodcastLibrary {
     private var serverPlayed = Set<String>()
     private var playedChanges: [String: Bool] = [:]
     private(set) var updatingPlayed = Set<String>()
-    private(set) var busy = false
+    private var catalogLoad: Task<StudioSession, Error>?
+    var busy: Bool { catalogLoad != nil }
     private(set) var ready = false
     private(set) var changing = Set<String>()
     var message: String?
@@ -20,10 +21,21 @@ final class PodcastLibrary {
 
     func refresh() async {
         guard !busy, changing.isEmpty, updatingPlayed.isEmpty else { return }
-        busy = true
-        defer { busy = false }
-        let candidate = StudioSession()
-        do {
+        do { _ = try await reloadCatalog() }
+        catch { if !Task.isCancelled { message = LibraryError.message(for: error) } }
+    }
+
+    func sessionForRequest() async throws -> StudioSession {
+        try Task.checkCancellation()
+        if session.isAvailable { return session }
+        return try await reloadCatalog()
+    }
+
+    private func reloadCatalog() async throws -> StudioSession {
+        if let catalogLoad { return try await catalogLoad.value }
+        let load = Task {
+            defer { catalogLoad = nil }
+            let candidate = StudioSession()
             let catalog = try await candidate.catalog()
             for task in pending.values { task.cancel() }
             pending.removeAll()
@@ -36,12 +48,16 @@ final class PodcastLibrary {
             playedChanges.removeAll()
             ready = true
             rebuildFeed()
-        } catch { if !Task.isCancelled { message = LibraryError.unavailable.errorDescription } }
+            return candidate
+        }
+        catalogLoad = load
+        return try await load.value
     }
 
     func load(_ show: Show) async throws {
         guard episodes[show.id] == nil else { return }
-        let source = session
+        let source = try await sessionForRequest()
+        try Task.checkCancellation()
         let task: Task<[Episode], Error>
         if let existing = pending[show.id] { task = existing }
         else {
@@ -80,7 +96,12 @@ final class PodcastLibrary {
             throw CancellationError()
         }
         defer { updatingPlayed.remove(episode.id) }
-        try await session.setPlayed(played, id: episode.id)
+        let owner = account
+        let source = try await sessionForRequest()
+        guard account == owner else { throw LibraryError.expired }
+        try Task.checkCancellation()
+        try await source.setPlayed(played, id: episode.id)
+        guard source === session else { throw CancellationError() }
         playedChanges[episode.id] = played
     }
 
@@ -88,9 +109,11 @@ final class PodcastLibrary {
         guard account != nil, changing.isEmpty, !busy else { return }
         changing.insert(show.id)
         defer { changing.remove(show.id) }
-        let source = session
-        let old = subscriptions[show.id]
+        let owner = account
         do {
+            let source = try await sessionForRequest()
+            guard account == owner else { throw LibraryError.expired }
+            let old = subscriptions[show.id]
             let updated = try await source.setFollow(old == nil, show: show)
             guard source === session else { return }
             subscriptions = updated

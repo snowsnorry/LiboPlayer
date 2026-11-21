@@ -22,7 +22,7 @@
     "Couldn’t Search Episodes" : {
 
     },
-    "Couldn’t load Libo/Libo. Check your connection and try again." : {
+    "Couldn’t load Libo/Libo. Try again." : {
 
     },
     "Couldn’t load the next episode." : {
@@ -56,6 +56,9 @@
 
     },
     "Libo/Libo Account" : {
+
+    },
+    "Libo/Libo took too long to respond. Try again." : {
 
     },
     "Listening status" : {
@@ -176,6 +179,9 @@
 
     },
     "· %lld min left" : {
+
+    },
+    "You’re offline. Check your internet connection and try again." : {
 
     }
   },
