@@ -27,15 +27,19 @@ struct LibraryScreen: View {
         VStack(spacing: 0) {
             NavigationStack(path: $path) {
                 Group {
-                    if !library.ready {
-                        if library.busy { ProgressView("Loading shows…") }
-                        else { Button("Load Shows") { Task { await library.refresh() } } }
-                    } else {
-                        switch tab {
-                        case .shows: showsGrid
-                        case .episodes: myEpisodes
-                        case .search: EpisodeSearchScreen(query: $catalogSearch)
+                    switch tab {
+                    case .shows:
+                        ZStack {
+                            if library.ready { showsGrid }
+                            else { catalogLoading }
                         }
+                        .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
+                                    prompt: "Search show titles")
+                    case .episodes:
+                        myEpisodes
+                    case .search:
+                        if library.ready { EpisodeSearchScreen(query: $catalogSearch) }
+                        else { catalogLoading }
                     }
                 }
                 .navigationTitle(Text(tab.title))
@@ -99,6 +103,11 @@ struct LibraryScreen: View {
         }.background(.regularMaterial)
     }
 
+    @ViewBuilder private var catalogLoading: some View {
+        if library.busy { ProgressView("Loading shows…") }
+        else { Button("Load Shows") { Task { await library.refresh() } } }
+    }
+
     private var showsGrid: some View {
         let term = showSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         let shows = term.isEmpty ? library.shows : library.shows.filter { $0.name.localizedStandardContains(term) }
@@ -118,29 +127,34 @@ struct LibraryScreen: View {
         .overlay {
             if !term.isEmpty && shows.isEmpty { ContentUnavailableView.search(text: term) }
         }
-        .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search show titles")
         .refreshable { await library.refresh() }
     }
 
     @ViewBuilder private var myEpisodes: some View {
-        if library.account == nil {
+        if library.ready && library.account == nil {
             ContentUnavailableView { Label("My Episodes", systemImage: "heart") }
                 description: { Text("Sign in to see episodes from the shows you follow.") }
                 actions: { Button("Sign in with Telegram") { login = true } }
-        } else if library.subscriptions.isEmpty {
+        } else if library.ready && library.subscriptions.isEmpty {
             ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
                 actions: { Button("Browse Shows") { tab = .shows } }
-        } else if archiveError {
-            ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "wifi.exclamationmark") }
-                actions: { Button("Try Again") { archiveRetry += 1 } }
-        } else if !library.archiveReady {
-            ProgressView("Loading episodes…")
-        } else if library.feed.isEmpty {
-            ContentUnavailableView("No Episodes in Your Followed Shows", systemImage: "rectangle.stack")
         } else {
-            EpisodeList(episodes: library.feed, source: .library, query: $episodeQuery)
-                .refreshable { await library.refresh() }
+            ZStack {
+                if !library.ready { catalogLoading }
+                else if archiveError {
+                    ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "wifi.exclamationmark") }
+                        actions: { Button("Try Again") { archiveRetry += 1 } }
+                } else if !library.archiveReady {
+                    ProgressView("Loading episodes…")
+                } else if library.feed.isEmpty {
+                    ContentUnavailableView("No Episodes in Your Followed Shows", systemImage: "rectangle.stack")
+                } else {
+                    EpisodeList(episodes: library.feed, source: .library, query: $episodeQuery)
+                        .refreshable { await library.refresh() }
+                }
+            }
+            .searchable(text: $episodeQuery.title, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search episode titles")
         }
     }
 
@@ -155,13 +169,15 @@ private struct ShowScreen: View {
     @State private var retry = 0
     @State private var episodeQuery = EpisodeQuery()
     var body: some View {
-        Group {
+        ZStack {
             if let rows = library.episodes[show.id] {
                 if rows.isEmpty { ContentUnavailableView("No Episodes Yet", systemImage: "waveform") }
                 else { EpisodeList(episodes: rows, source: .show(show.id), query: $episodeQuery) }
             } else if loadFailed { Button("Retry Loading Episodes") { retry += 1 } }
             else { ProgressView("Loading episodes…") }
         }
+        .searchable(text: $episodeQuery.title, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search episode titles")
         .navigationTitle(show.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

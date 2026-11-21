@@ -18,8 +18,6 @@ struct EpisodeList: View {
                                        description: Text("Try another title or listening status."))
             }
         }
-        .searchable(text: $query.title, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search episode titles")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
