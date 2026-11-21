@@ -83,6 +83,12 @@ enum StudioPayload {
         flag(row["paid"]) && !(flag(row["audioguide"]) ? guide : paid)
     }
 
+    static func description(in row: Row) -> String? {
+        guard let text = row["description"] as? String else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     static func episodes(_ rows: [Row], showID: String?, paid: Bool, guide: Bool) -> [Episode] {
         var seen = Set<String>()
         return rows.compactMap { row in
@@ -94,7 +100,8 @@ enum StudioPayload {
                            published: timestamp(row["createdAt"]), duration: number(row["length"]),
                            locked: locked, played: flag(row["played"]), artwork: artwork(row, fallback: "pic"),
                            track: locked ? nil : row["track"] as? String,
-                           access: flag(row["paid"]) ? (flag(row["audioguide"]) ? .guide : .subscription) : nil)
+                           access: flag(row["paid"]) ? (flag(row["audioguide"]) ? .guide : .subscription) : nil,
+                           description: description(in: row))
         }
     }
 }

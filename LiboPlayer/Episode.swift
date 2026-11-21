@@ -38,6 +38,7 @@ struct Episode: Codable, Identifiable, Hashable {
     let artwork: String?
     var track: String?
     var access: Access? = nil
+    var description: String? = nil
     enum Access: String, Codable { case subscription, guide }
 
     var offlineMetadata: Self {

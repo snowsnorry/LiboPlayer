@@ -1,11 +1,13 @@
 import AVFoundation
+import os
 import UniformTypeIdentifiers
 
 enum EpisodeAudio {
     /// Returns a validated temporary file. The caller owns its removal or installation.
-    static func download(from url: URL) async throws -> URL {
+    static func download(from url: URL, onProgress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> URL {
         let files = FileManager.default
-        let (temporary, response) = try await URLSession.shared.download(from: url)
+        let delegate = DownloadProgressDelegate(onProgress: onProgress)
+        let (temporary, response) = try await URLSession.shared.download(from: url, delegate: delegate)
         defer { try? files.removeItem(at: temporary) }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200,
               http.url?.scheme == "https", http.mimeType != "text/html" else { throw LibraryError.noAudio }
@@ -37,5 +39,26 @@ enum EpisodeAudio {
             try? files.removeItem(at: audio)
             throw error
         }
+    }
+}
+
+private final class DownloadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let onProgress: @MainActor @Sendable (Double) -> Void
+    private let observation = OSAllocatedUnfairLock<NSKeyValueObservation?>(uncheckedState: nil)
+
+    init(onProgress: @escaping @MainActor @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        // Async downloads deliver task callbacks and update Progress while writing to disk.
+        let token = task.progress.observe(\.fractionCompleted, options: [.new]) { [weak task, onProgress] _, _ in
+            guard let task else { return }
+            let expected = task.countOfBytesExpectedToReceive
+            guard expected > 0 else { return }
+            let fraction = Double(task.countOfBytesReceived) / Double(expected)
+            Task { @MainActor in onProgress(fraction) }
+        }
+        observation.withLockUnchecked { $0 = token }
     }
 }

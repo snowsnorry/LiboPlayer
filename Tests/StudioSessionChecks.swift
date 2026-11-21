@@ -50,9 +50,9 @@ private final class FixtureAPI: URLProtocol {
             precondition(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == "t")
             body = #"[{"feed":"show"},{"feed":"show"},{"feed":"other","active":false}]"#
         case ("GET", "/api/items/a"):
-            body = #"{"feed":"show","name":"A","paid":true,"track":"https://example.org/audio"}"#
+            body = #"{"feed":"show","name":"A","paid":true,"track":"https://example.org/audio","description":"<p>Complete notes</p>"}"#
         case ("GET", "/api/episodes/show"):
-            body = #"[{"id":"a","name":"A","paid":true,"length":"65","track":"https://example.org/audio","createdAt":{"_seconds":300}},{"id":"a"},{"active":false,"id":"b"},{"id":"c","paid":true,"audioguide":true}]"#
+            body = #"[{"id":"a","name":"A","paid":true,"length":"65","track":"https://example.org/audio","createdAt":{"_seconds":300},"description":" <p>About A</p> "},{"id":"a"},{"active":false,"id":"b"},{"id":"c","paid":true,"audioguide":true,"description":" "}]"#
         case ("GET", "/api/episodes/other"):
             body = #"[{"id":"d","name":"New release","createdAt":{"_seconds":400}}]"#
         case ("GET", "/api/suggest"):
@@ -90,6 +90,7 @@ struct StudioSessionChecks {
         precondition(members == ["show"])
         let rows = try await session.episodes(for: show)
         precondition(rows.count == 2 && rows[0].duration == 65 && rows[0].streamURL != nil && rows[1].locked)
+        precondition(rows[0].description == "<p>About A</p>" && rows[1].description == nil)
         let other = catalog.shows[1]
         let archives = [show.id: rows.sorted(by: Episode.precedes), other.id: try await session.episodes(for: other)]
         let updated = Show.recentlyUpdated(catalog.shows, archives: archives)
@@ -103,7 +104,9 @@ struct StudioSessionChecks {
         let stream = try await session.stream(for: stub)
         precondition(stream.scheme == "https")
         let matches = try await session.searchEpisodes("one & two")
-        precondition(matches.count == 1)
+        precondition(matches.count == 1 && matches[0].description == nil)
+        let description = try await session.episodeDescription(matches[0].id)
+        precondition(description == "<p>Complete notes</p>")
         try await session.setPlayed(true, id: "a")
         try await session.setPlayed(false, id: "a")
         do {

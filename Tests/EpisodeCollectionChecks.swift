@@ -8,17 +8,22 @@ struct EpisodeCollectionChecks {
         let shelf = EpisodeCollection(account: "one", root: root)
         let show = Show(id: "show", name: "Show", artwork: nil)
         let episode = Episode(id: "episode", showID: show.id, name: "Episode", published: 1, duration: 10,
-                              locked: false, played: false, artwork: nil, track: nil)
+                              locked: false, played: false, artwork: nil, track: nil, description: "<p>Episode notes</p>")
         precondition(shelf.saved.isEmpty && shelf.downloaded.isEmpty)
         try shelf.setSaved(true, episode: episode, show: show)
         precondition(shelf.saved == [episode] && shelf.downloaded.isEmpty)
-        precondition(shelf.beginDownload(episode.id) && !shelf.beginDownload(episode.id))
+        guard let firstDownload = shelf.beginDownload(episode.id) else { preconditionFailure("Download did not start") }
+        precondition(shelf.beginDownload(episode.id) == nil && firstDownload.fractionCompleted == nil)
+        firstDownload.update(0.5)
+        firstDownload.update(0.25)
+        precondition(firstDownload.fractionCompleted == 0.5)
         let partial = root.appending(component: "missing")
         do {
             try shelf.install(partial, episode: episode, show: show, extension: "mp3")
             preconditionFailure("Missing file should fail")
         } catch { shelf.endDownload(episode.id) }
-        precondition(shelf.beginDownload(episode.id) && shelf.downloaded.isEmpty)
+        guard let retry = shelf.beginDownload(episode.id) else { preconditionFailure("Download did not restart") }
+        precondition(retry.fractionCompleted == nil && shelf.downloaded.isEmpty)
         let temp = root.appending(component: "incoming")
         let audio = Data([1, 2, 3, 4])
         try audio.write(to: temp)
@@ -48,7 +53,7 @@ struct EpisodeCollectionChecks {
         let legacyJSON = #"{"bookmarks":{"episode":{"record":"web-record","episode":{"id":"episode","showID":"show","name":"Episode","published":1,"duration":10,"locked":false,"played":false}}},"downloads":{},"shows":{}}"#
         try Data(legacyJSON.utf8).write(to: legacy)
         let guest = EpisodeCollection(account: nil, root: root)
-        precondition(guest.saved == [episode])
+        precondition(guest.saved.map(\.id) == [episode.id] && guest.saved[0].description == nil)
         try guest.setSaved(false, episode: episode, show: show)
         precondition(EpisodeCollection(account: nil, root: root).saved.isEmpty)
         precondition(EpisodeCollection(account: "one", root: root).isSaved(episode.id))

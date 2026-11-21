@@ -63,12 +63,14 @@ final class PodcastLibrary {
                 return
             }
             guard !episode.locked else { throw LibraryError.locked }
-            guard shelf.beginDownload(episode.id) else { return }
+            guard let download = shelf.beginDownload(episode.id) else { return }
             defer { shelf.endDownload(episode.id) }
             let source = try await sessionForRequest()
             guard shelf === collection else { return }
             let url = try await source.stream(for: episode)
-            let audioFile = try await EpisodeAudio.download(from: url)
+            let audioFile = try await EpisodeAudio.download(from: url) { fraction in
+                download.update(fraction)
+            }
             defer { try? FileManager.default.removeItem(at: audioFile) }
             guard shelf === collection else { return }
             let current = session.withCurrentAccess(episode)

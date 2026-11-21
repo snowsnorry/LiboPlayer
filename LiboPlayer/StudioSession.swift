@@ -171,11 +171,22 @@ final class StudioSession {
     func stream(for episode: Episode) async throws -> URL {
         guard !episode.locked else { throw LibraryError.locked }
         if let url = episode.streamURL { return url }
-        let data = try await api(["items", episode.id])
-        guard let row = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LibraryError.unavailable }
+        let row = try await item(episode.id)
         guard !StudioPayload.locked(row, paid: paid, guide: guide) else { throw LibraryError.locked }
         guard let track = row["track"] as? String, let url = URL(string: track), url.scheme == "https" else { throw LibraryError.noAudio }
         return url
+    }
+
+    func episodeDescription(_ id: String) async throws -> String? {
+        StudioPayload.description(in: try await item(id))
+    }
+
+    private func item(_ id: String) async throws -> StudioPayload.Row {
+        let data = try await api(["items", id])
+        guard let row = try JSONSerialization.jsonObject(with: data) as? StudioPayload.Row else {
+            throw LibraryError.unavailable
+        }
+        return row
     }
 
     func withCurrentAccess(_ episode: Episode) -> Episode {

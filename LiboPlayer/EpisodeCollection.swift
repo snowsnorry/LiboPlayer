@@ -2,6 +2,15 @@ import CryptoKit
 import Foundation
 import Observation
 
+@MainActor @Observable
+final class EpisodeDownload {
+    private(set) var fractionCompleted: Double?
+
+    func update(_ fraction: Double) {
+        fractionCompleted = max(fractionCompleted ?? 0, min(fraction, 1))
+    }
+}
+
 /// The index and its audio files belong to one studio account (or to the guest).
 @MainActor @Observable
 final class EpisodeCollection {
@@ -23,7 +32,7 @@ final class EpisodeCollection {
     private let directory: URL
     private var index = Index()
     private let files = FileManager.default
-    private(set) var downloading = Set<String>()
+    private(set) var downloadsInProgress: [String: EpisodeDownload] = [:]
     private(set) var loadError: Error?
 
     init(account: String?, root: URL = .applicationSupportDirectory) {
@@ -86,8 +95,14 @@ final class EpisodeCollection {
         try commit(next)
     }
 
-    func beginDownload(_ id: String) -> Bool { localURL(id) == nil && downloading.insert(id).inserted }
-    func endDownload(_ id: String) { downloading.remove(id) }
+    func beginDownload(_ id: String) -> EpisodeDownload? {
+        guard localURL(id) == nil, downloadsInProgress[id] == nil else { return nil }
+        let download = EpisodeDownload()
+        downloadsInProgress[id] = download
+        return download
+    }
+
+    func endDownload(_ id: String) { downloadsInProgress[id] = nil }
 
     func install(_ temporary: URL, episode: Episode, show: Show?, extension ext: String) throws {
         guard localURL(episode.id) == nil else { return }

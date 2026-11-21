@@ -103,15 +103,18 @@ final class PodcastPlayer {
         persist()
     }
 
-    func select(_ episode: Episode, from source: QueueSource) {
+    func playbackPosition(for episode: Episode) -> Double {
+        if current?.id == episode.id && !loading && engine.currentItem != nil { return position }
+        return isFinished(episode) ? 0 : history.resume(episode)
+    }
+
+    func toggle(_ episode: Episode, from source: QueueSource) {
         guard !episode.locked else { message = LibraryError.locked.errorDescription; return }
+        guard current?.id != episode.id || !loading else { return }
         self.source = source
-        expanded = true
-        if current?.id == episode.id && (loading || engine.currentItem != nil) {
-            if !playing && !loading { resume() }
-            return
-        }
-        start(episode)
+        expanded = false
+        if current?.id == episode.id && engine.currentItem != nil { toggle() }
+        else { start(episode) }
     }
 
     private func start(_ episode: Episode) {
