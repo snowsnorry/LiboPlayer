@@ -1,6 +1,7 @@
 import AVFoundation
 import MediaPlayer
 import Observation
+import UIKit
 
 enum QueueSource { case library, show(String) }
 
@@ -9,6 +10,8 @@ final class PodcastPlayer {
     private let library: PodcastLibrary
     @ObservationIgnored private let engine = AVPlayer()
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var artworkTask: Task<Void, Never>?
+    @ObservationIgnored private var nowPlayingArtwork: MPMediaItemArtwork?
     @ObservationIgnored private var tick: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
     @ObservationIgnored private var failureObserver: NSKeyValueObservation?
@@ -46,6 +49,7 @@ final class PodcastPlayer {
         save()
         clearItem()
         current = nil
+        nowPlayingArtwork = nil
         expanded = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         owner = key
@@ -113,6 +117,7 @@ final class PodcastPlayer {
         save()
         clearItem()
         current = episode
+        nowPlayingArtwork = nil
         duration = episode.duration
         position = isFinished(episode) ? 0 : history.resume(episode)
         lastSave = position
@@ -136,6 +141,7 @@ final class PodcastPlayer {
                 try Task.checkCancellation()
                 loading = false
                 resume()
+                loadArtwork(for: episode)
             } catch {
                 guard !Task.isCancelled else { return }
                 loading = false
@@ -194,6 +200,8 @@ final class PodcastPlayer {
     }
 
     private func clearItem() {
+        artworkTask?.cancel()
+        artworkTask = nil
         loadTask?.cancel()
         loadTask = nil
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
@@ -253,15 +261,34 @@ final class PodcastPlayer {
         }
     }
 
+    private func loadArtwork(for episode: Episode) {
+        let show = library.shows.first { $0.id == episode.showID }
+        guard let address = episode.artwork ?? show?.artwork, let url = URL(string: address) else { return }
+        artworkTask = Task { [weak self] in
+            guard let (data, response) = try? await URLSession.shared.data(from: url),
+                  !Task.isCancelled, let self, current?.id == episode.id,
+                  let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let image = UIImage(data: data) else { return }
+            nowPlayingArtwork = Self.makeArtwork(from: image)
+            publishNowPlaying()
+        }
+    }
+
+    private nonisolated static func makeArtwork(from image: UIImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+    }
+
     private func publishNowPlaying() {
         guard let current else { return }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: current.name,
             MPMediaItemPropertyArtist: library.shows.first { $0.id == current.showID }?.name ?? "",
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: playing ? speed : 0
         ]
+        info[MPMediaItemPropertyArtwork] = nowPlayingArtwork
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func installCommands() {
