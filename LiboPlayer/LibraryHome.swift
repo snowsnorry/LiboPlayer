@@ -17,6 +17,8 @@ private struct LeadingNavigationTitle: ViewModifier {
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityAddTraits(.isHeader)
         content
+            // Loading indicators have an intrinsic width smaller than the navigation bar.
+            .frame(maxWidth: .infinity)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .navigationTitle(Text(verbatim: "")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
