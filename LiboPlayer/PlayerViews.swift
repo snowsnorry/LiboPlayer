@@ -1,27 +1,50 @@
 import SwiftUI
 
+@available(iOS 26.0, *)
+struct MiniPlayerAccessory: View {
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+
+    var body: some View {
+        MiniPlayer(inline: placement == .inline)
+    }
+}
+
 struct MiniPlayer: View {
     @Environment(PodcastPlayer.self) private var player
     @Environment(PodcastLibrary.self) private var library
+    let inline: Bool
+
     var body: some View {
         if let item = player.current {
             let show = library.shows.first { $0.id == item.showID }
-            HStack(spacing: 8) {
+            HStack(spacing: inline ? 0 : 4) {
                 Button { player.expanded = true } label: {
-                    HStack(spacing: 10) {
-                        Cover(artwork: item.artwork ?? show?.artwork, radius: 7).frame(width: 42)
-                        VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Cover(artwork: item.artwork ?? show?.artwork, radius: 6)
+                            .frame(width: inline ? 28 : 32, height: inline ? 28 : 32)
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(item.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-                            Text(show?.name ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            if let show {
+                                Text(show.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
                         }
-                        Spacer()
-                    }.contentShape(Rectangle())
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityHint("Open player")
                 Button { player.toggle() } label: {
                     Image(systemName: player.playing ? "pause.fill" : "play.fill").frame(width: 44, height: 44)
                 }.buttonStyle(.plain).accessibilityLabel(player.playing ? Text("Pause") : Text("Play"))
                     .disabled(player.loading)
-            }.padding(.horizontal, 16).padding(.vertical, 7)
+                if !inline {
+                    Button { player.seek(player.position + 30) } label: {
+                        Image(systemName: "goforward.30").frame(width: 44, height: 44)
+                    }.buttonStyle(.plain).accessibilityLabel("Skip forward 30 seconds")
+                        .disabled(player.loading)
+                }
+            }
+            .padding(.leading, inline ? 8 : 16)
+            .padding(.trailing, inline ? 2 : 8)
         }
     }
 }

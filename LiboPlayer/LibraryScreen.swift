@@ -24,83 +24,104 @@ struct LibraryScreen: View {
     @State private var episodeQuery = EpisodeQuery()
 
     var body: some View {
-        VStack(spacing: 0) {
+        tabsWithPlayer
+            .task { if !library.ready { await library.refresh() } }
+            .task(id: ArchiveKey(session: ObjectIdentifier(library.session), shows: library.subscriptions.keys.sorted(), retry: archiveRetry)) {
+                archiveError = false
+                do { try await library.loadArchive() }
+                catch { if !Task.isCancelled { archiveError = true } }
+            }
+            .onChange(of: library.account) { _, id in player.useAccount(id) }
+            .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
+            .sheet(isPresented: Binding(get: { player.expanded }, set: { player.expanded = $0 })) { PlayerSheet().presentationDragIndicator(.visible) }
+            .fullScreenCover(isPresented: $login, onDismiss: { Task { await library.refresh() } }) {
+                NavigationStack {
+                    SignInPage().ignoresSafeArea(edges: .bottom)
+                        .navigationTitle("Libo/Libo Account").navigationBarTitleDisplayMode(.inline)
+                        .toolbar { Button("Done") { login = false } }
+                }
+            }
+            .alert("Libo/Libo", isPresented: Binding(get: { library.message != nil || player.message != nil },
+                   set: { if !$0 { library.message = nil; player.message = nil } })) {
+                Button("Close", role: .cancel) {}
+            } message: { Text(player.message ?? library.message ?? "") }
+            .tint(.accentColor)
+    }
+
+    @ViewBuilder private var tabsWithPlayer: some View {
+        if #available(iOS 26.1, *) {
+            floatingTabs.tabViewBottomAccessory(isEnabled: player.current != nil) { MiniPlayerAccessory() }
+        } else if #available(iOS 26.0, *) {
+            if player.current != nil {
+                floatingTabs.tabViewBottomAccessory { MiniPlayerAccessory() }
+            } else {
+                floatingTabs
+            }
+        } else {
+            TabView(selection: $tab) {
+                ForEach(LibraryTab.allCases, id: \.self) { item in
+                    screen(for: item)
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            if player.current != nil {
+                                MiniPlayer(inline: false)
+                                    .padding(.vertical, 4)
+                                    .background(.regularMaterial)
+                            }
+                        }
+                        .tabItem { Label { Text(item.title) } icon: { Image(systemName: item.icon) } }
+                        .tag(item)
+                }
+            }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var floatingTabs: some View {
+        TabView(selection: $tab) {
+            Tab("Shows", systemImage: LibraryTab.shows.icon, value: LibraryTab.shows) { screen(for: .shows) }
+            Tab("My Episodes", systemImage: LibraryTab.episodes.icon, value: LibraryTab.episodes) { screen(for: .episodes) }
+            Tab(value: LibraryTab.search, role: .search) { screen(for: .search) }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+    }
+
+    @ViewBuilder private func screen(for item: LibraryTab) -> some View {
+        switch item {
+        case .shows:
             NavigationStack(path: $path) {
                 Group {
-                    switch tab {
-                    case .shows:
-                        ZStack {
-                            if library.ready { showsGrid }
-                            else { catalogLoading }
-                        }
-                        .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
-                                    prompt: "Search show titles")
-                    case .episodes:
-                        myEpisodes
-                    case .search:
-                        if library.ready { EpisodeSearchScreen(query: $catalogSearch) }
-                        else { catalogLoading }
-                    }
+                    if library.ready { showsGrid }
+                    else { catalogLoading }
                 }
-                .navigationTitle(Text(tab.title))
+                .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
+                            prompt: "Search show titles")
+                .navigationTitle(Text(item.title))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    if tab == .shows {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button { login = true } label: {
-                                Image(systemName: library.account == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
-                            }.accessibilityLabel(library.account == nil ? Text("Sign in with Telegram") : Text("Libo/Libo Account"))
-                        }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { login = true } label: {
+                            Image(systemName: library.account == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
+                        }.accessibilityLabel(library.account == nil ? Text("Sign in with Telegram") : Text("Libo/Libo Account"))
                     }
                 }
                 .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
-            .id(tab)
-            bottomBar
-        }
-        .task { if !library.ready { await library.refresh() } }
-        .task(id: ArchiveKey(session: ObjectIdentifier(library.session), shows: library.subscriptions.keys.sorted(), retry: archiveRetry)) {
-            archiveError = false
-            do { try await library.loadArchive() }
-            catch { if !Task.isCancelled { archiveError = true } }
-        }
-        .onChange(of: library.account) { _, id in player.useAccount(id) }
-        .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
-        .sheet(isPresented: Binding(get: { player.expanded }, set: { player.expanded = $0 })) { PlayerSheet().presentationDragIndicator(.visible) }
-        .fullScreenCover(isPresented: $login, onDismiss: { Task { await library.refresh() } }) {
+        case .episodes:
             NavigationStack {
-                SignInPage().ignoresSafeArea(edges: .bottom)
-                    .navigationTitle("Libo/Libo Account").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button("Done") { login = false } }
+                myEpisodes
+                    .navigationTitle(Text(item.title))
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+        case .search:
+            NavigationStack {
+                Group {
+                    if library.ready { EpisodeSearchScreen(query: $catalogSearch) }
+                    else { catalogLoading }
+                }
+                .navigationTitle(Text(item.title))
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
-        .alert("Libo/Libo", isPresented: Binding(get: { library.message != nil || player.message != nil },
-               set: { if !$0 { library.message = nil; player.message = nil } })) {
-            Button("Close", role: .cancel) {}
-        } message: { Text(player.message ?? library.message ?? "") }
-        .tint(.accentColor)
-    }
-
-    private var bottomBar: some View {
-        VStack(spacing: 0) {
-            if player.current != nil { MiniPlayer() }
-            Divider()
-            HStack {
-                ForEach(LibraryTab.allCases, id: \.self) { item in
-                    Button {
-                        path.removeAll()
-                        tab = item
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: item.icon).font(.system(size: 19, weight: .medium))
-                            Text(item.title).font(.caption2.weight(.medium))
-                        }.frame(maxWidth: .infinity, minHeight: 45)
-                    }
-                    .foregroundStyle(tab == item ? Color.accentColor : .secondary)
-                    .accessibilityAddTraits(tab == item ? .isSelected : [])
-                }
-            }.padding(.top, 4)
-        }.background(.regularMaterial)
     }
 
     @ViewBuilder private var catalogLoading: some View {
@@ -137,7 +158,10 @@ struct LibraryScreen: View {
                 actions: { Button("Sign in with Telegram") { login = true } }
         } else if library.ready && library.subscriptions.isEmpty {
             ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
-                actions: { Button("Browse Shows") { tab = .shows } }
+                actions: { Button("Browse Shows") {
+                    path.removeAll()
+                    tab = .shows
+                } }
         } else {
             ZStack {
                 if !library.ready { catalogLoading }

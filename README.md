@@ -12,7 +12,7 @@ The app streams audio from Libo/Libo and uses the studio’s web player for sign
 
 ## Run on iPhone or Simulator
 
-Use Xcode on macOS with an iOS SDK and an iPhone or simulator running iOS 17 or later. The project uses Apple frameworks and has no external package dependencies.
+Use Xcode on macOS with the iOS 26.1 SDK or later and an iPhone or simulator running iOS 17 or later. On iOS 26 and later, scrolling down collapses the tab bar and moves the mini-player beside the current tab and Search. The project uses Apple frameworks and has no external package dependencies.
 
 1. Open `LiboPlayer.xcodeproj` in Xcode.
 2. Select the `LiboPlayer` scheme and an iPhone simulator. For a physical iPhone, select your device and set your development team under **Signing & Capabilities**. If needed, choose a bundle identifier available to your team.
