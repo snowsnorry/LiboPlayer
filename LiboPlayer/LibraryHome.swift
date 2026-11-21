@@ -56,6 +56,7 @@ enum LibrarySection: CaseIterable, Hashable {
 
 struct LibraryHome: View {
     @Environment(PodcastLibrary.self) private var library
+    let openShow: (Show) -> Void
 
     var body: some View {
         let recent = Show.recentlyUpdated(library.followedShows, archives: library.episodes)
@@ -67,7 +68,7 @@ struct LibraryHome: View {
             }
             if !recent.isEmpty {
                 Section {
-                    ShowGrid(shows: recent, showsDate: true)
+                    ShowGrid(shows: recent, showsDate: true, openShow: openShow)
                         .listRowSeparator(.hidden)
                 } header: {
                     Text("Recently Updated").font(.headline).foregroundStyle(.primary).textCase(nil)
@@ -83,13 +84,14 @@ struct LibraryHome: View {
 struct ShowGrid: View {
     let shows: [Show]
     var showsDate = false
+    let openShow: (Show) -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let column = GridItem(.flexible(), spacing: 16, alignment: .top)
         LazyVGrid(columns: typeSize.isAccessibilitySize ? [column] : [column, column], alignment: .leading, spacing: 22) {
             ForEach(shows) { show in
-                NavigationLink(value: show) {
+                Button { openShow(show) } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         Cover(artwork: show.artwork, radius: 12)
                         Text(show.name).font(.subheadline.weight(.semibold)).lineLimit(2)
@@ -97,13 +99,14 @@ struct ShowGrid: View {
                             Text("Updated \(Date(timeIntervalSince1970: time), style: .relative) ago")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.borderless)
                 .tint(.primary)
             }
         }
-        .navigationLinkIndicatorVisibility(.hidden)
     }
 }
 

@@ -108,7 +108,7 @@ struct LibraryScreen: View {
             }
         case .library:
             NavigationStack(path: $libraryPath) {
-                LibraryHome()
+                LibraryHome { libraryPath.append($0) }
                     .leadingTitle(Text(item.title))
                     .toolbar { profileToolbarItem }
                     .navigationDestination(for: LibrarySection.self) { section in
@@ -122,8 +122,11 @@ struct LibraryScreen: View {
                         }.leadingTitle(Text(section.title))
                     }
                     .navigationDestination(for: StudioCategory.self) { category in
-                        ScrollView { ShowGrid(shows: library.followedShows(in: category)).padding(.horizontal, 18) }
-                            .leadingTitle(Text(verbatim: category.name))
+                        ScrollView {
+                            ShowGrid(shows: library.followedShows(in: category)) { libraryPath.append($0) }
+                                .padding(.horizontal, 18)
+                        }
+                        .leadingTitle(Text(verbatim: category.name))
                     }
                     .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
@@ -157,7 +160,9 @@ struct LibraryScreen: View {
         let term = showSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         let shows = term.isEmpty ? library.shows : library.shows.filter { $0.name.localizedStandardContains(term) }
         return ScrollView {
-            ShowGrid(shows: shows).padding(.horizontal, 18).padding(.bottom, 24)
+            ShowGrid(shows: shows) { path.append($0) }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 24)
         }
         .overlay {
             if !term.isEmpty && shows.isEmpty { ContentUnavailableView.search(text: term) }
@@ -175,7 +180,8 @@ struct LibraryScreen: View {
                 actions: { Button("Browse Shows") { path.removeAll(); tab = .allShows } }
         } else {
             ScrollView {
-                ShowGrid(shows: library.followedShows.sorted(by: Show.alphabetical)).padding(.horizontal, 18)
+                ShowGrid(shows: library.followedShows.sorted(by: Show.alphabetical)) { libraryPath.append($0) }
+                    .padding(.horizontal, 18)
             }.refreshable { await library.refresh() }
         }
     }
