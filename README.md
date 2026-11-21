@@ -8,7 +8,13 @@ Libo Player is a native iPhone app for listening to [Libo/Libo podcasts](https:/
 - Resume an episode from your saved position. When it ends, the player skips locked and completed episodes as it moves through the list.
 - Listen in the background, control playback from the Lock Screen, and choose a speed from 0.75× to 2×.
 
-The app streams audio from Libo/Libo and uses the studio’s web player for sign-in and catalog access. Subscription episodes require the corresponding access on your Libo/Libo account.
+The app uses the studio’s account page for Telegram sign-in. Tap **Done** to save the session in the iPhone Keychain. When upgrading from the web-based player, the account page can reuse the existing website login. The app loads the catalog, episodes, search results and subscriptions directly over HTTPS. The public home page supplies the shows as embedded JSON. If the studio rejects a signed-in session, open the account page to sign in again. Subscription episodes require the corresponding access on your Libo/Libo account.
+
+## Session handling
+
+The web player exchanges the Telegram widget result at `POST /webAuth` and stores the studio-issued token in its own origin. The native app hands off that token only when the account screen is confirmed. Requests to the studio API carry the bearer token and, for a linked account, the site's `webAuthed` header. Guest tokens come from `POST /authPlayer`.
+
+On launch the native app checks the saved session by loading the profile it needs for the catalog. A rejected guest session is replaced once. A rejected member session requires confirming the account again. Timeouts and server errors preserve the saved credential. Requests with credentials do not follow redirects.
 
 ## Run on iPhone or Simulator
 
@@ -26,4 +32,14 @@ From the repository root on macOS, run the following commands to check playback 
 mkdir -p build
 xcrun swiftc LiboPlayer/Episode.swift Tests/PlaybackOrderChecks.swift -o build/playback-checks
 ./build/playback-checks
+```
+
+## Run the native API checks
+
+These checks use local fixtures for guest renewal, expired member sessions, catalog parsing, search, playback marks and subscription changes.
+
+```sh
+mkdir -p build
+xcrun swiftc LiboPlayer/Episode.swift LiboPlayer/StudioCredential.swift LiboPlayer/StudioPayload.swift LiboPlayer/StudioSession.swift Tests/StudioSessionChecks.swift -o build/studio-checks
+./build/studio-checks
 ```

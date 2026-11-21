@@ -1,16 +1,69 @@
 import SwiftUI
 import WebKit
 
-enum StudioSite {
-    static let home = URL(string: "https://play.libolibo.me/")!
+struct SignInPage: View {
+    @Environment(PodcastLibrary.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    @State private var controller = LoginController()
+    @State private var saving = false
+    @State private var errorMessage: String?
+    @State private var guestToConfirm: StudioCredential?
 
-    static func isPlayer(_ url: URL?) -> Bool {
-        url?.scheme == "https" && url?.host == home.host && (url?.port == nil || url?.port == 443)
+    var body: some View {
+        NavigationStack {
+            LoginView(controller: controller)
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle("Libo/Libo Account").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }.disabled(saving)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        if saving { ProgressView() }
+                        else { Button("Done") { Task { await finish() } } }
+                    }
+                }
+        }
+        .interactiveDismissDisabled(saving)
+        .alert("Libo/Libo", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Close", role: .cancel) {}
+        } message: { Text(errorMessage ?? "") }
+        .confirmationDialog("Continue as a guest?", isPresented: Binding(
+            get: { guestToConfirm != nil }, set: { if !$0 { guestToConfirm = nil } }
+        ), presenting: guestToConfirm) { guest in
+            Button("Continue as a guest") { Task { await finish(confirmedGuest: guest) } }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func finish(confirmedGuest: StudioCredential? = nil) async {
+        guard !saving else { return }
+        saving = true
+        defer { saving = false }
+        do {
+            let credential: StudioCredential
+            if let confirmedGuest { credential = confirmedGuest }
+            else {
+                credential = try await controller.credential()
+                if !credential.signedIn, try StudioCredential.saved()?.signedIn == true {
+                    guestToConfirm = credential
+                    return
+                }
+            }
+            try await library.useCredential(credential)
+            dismiss()
+        } catch { errorMessage = LibraryError.message(for: error) }
+    }
+
+    static func hasPreviousLoginStorage() async -> Bool {
+        let records = await WKWebsiteDataStore.default().dataRecords(ofTypes: [WKWebsiteDataTypeLocalStorage])
+        return records.contains { $0.displayName == "libolibo.me" || $0.displayName == StudioSite.home.host }
     }
 }
 
-struct SignInPage: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> LoginController { LoginController() }
+private struct LoginView: UIViewControllerRepresentable {
+    let controller: LoginController
+    func makeUIViewController(context: Context) -> LoginController { controller }
     func updateUIViewController(_ uiViewController: LoginController, context: Context) {}
 }
 
@@ -22,6 +75,20 @@ final class LoginController: UIViewController, WKUIDelegate, WKNavigationDelegat
         super.viewDidLoad()
         let main = attach(configuration: WKWebViewConfiguration())
         main.load(URLRequest(url: StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "profile")])))
+    }
+
+    func credential() async throws -> StudioCredential {
+        guard let web = windows.first, windows.count == 1, StudioSite.isPlayer(web.url) else { throw LibraryError.expired }
+        // Only the visible studio account page can hand off its own session after Done.
+        let result = try await web.evaluateJavaScript("""
+            (() => {
+                if (location.origin !== 'https://play.libolibo.me' || typeof window.pageData?.feeds !== 'function') return null;
+                return {token: localStorage.liboToken, signedIn: localStorage.webAuthed === 'true' || !!localStorage.mailAuth};
+            })()
+            """)
+        guard let values = result as? [String: Any], let token = values["token"] as? String, !token.isEmpty,
+              let signedIn = values["signedIn"] as? Bool else { throw LibraryError.unavailable }
+        return StudioCredential(token: token, signedIn: signedIn)
     }
 
     private func attach(configuration: WKWebViewConfiguration) -> WKWebView {

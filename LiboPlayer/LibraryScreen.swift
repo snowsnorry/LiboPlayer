@@ -25,7 +25,14 @@ struct LibraryScreen: View {
 
     var body: some View {
         tabsWithPlayer
-            .task { if !library.ready { await library.refresh() } }
+            .task {
+                guard !library.ready else { return }
+                do {
+                    if try StudioCredential.saved() == nil, await SignInPage.hasPreviousLoginStorage() {
+                        login = true
+                    } else { await library.refresh() }
+                } catch { library.message = LibraryError.message(for: error) }
+            }
             .task(id: ArchiveKey(session: ObjectIdentifier(library.session), shows: library.subscriptions.keys.sorted(), retry: archiveRetry)) {
                 archiveError = nil
                 do { try await library.loadArchive() }
@@ -34,13 +41,9 @@ struct LibraryScreen: View {
             .onChange(of: library.account) { _, id in player.useAccount(id) }
             .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
             .sheet(isPresented: Binding(get: { player.expanded }, set: { player.expanded = $0 })) { PlayerSheet().presentationDragIndicator(.visible) }
-            .fullScreenCover(isPresented: $login, onDismiss: { Task { await library.refresh() } }) {
-                NavigationStack {
-                    SignInPage().ignoresSafeArea(edges: .bottom)
-                        .navigationTitle("Libo/Libo Account").navigationBarTitleDisplayMode(.inline)
-                        .toolbar { Button("Done") { login = false } }
-                }
-            }
+            .fullScreenCover(isPresented: $login, onDismiss: {
+                if !library.ready { Task { await library.refresh() } }
+            }) { SignInPage() }
             .alert("Libo/Libo", isPresented: Binding(get: { library.message != nil || player.message != nil },
                    set: { if !$0 { library.message = nil; player.message = nil } })) {
                 Button("Close", role: .cancel) {}

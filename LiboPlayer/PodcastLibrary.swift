@@ -31,12 +31,20 @@ final class PodcastLibrary {
         return try await reloadCatalog()
     }
 
-    private func reloadCatalog() async throws -> StudioSession {
+    func useCredential(_ credential: StudioCredential) async throws {
+        // A previous account's catalog must finish before the new identity can be installed.
+        while let catalogLoad { _ = await catalogLoad.result }
+        _ = try await reloadCatalog(using: credential)
+    }
+
+    private func reloadCatalog(using selected: StudioCredential? = nil) async throws -> StudioSession {
         if let catalogLoad { return try await catalogLoad.value }
         let load = Task {
             defer { catalogLoad = nil }
             let candidate = StudioSession()
-            let catalog = try await candidate.catalog()
+            let saved = try StudioCredential.saved()
+            let catalog = try await candidate.catalog(using: selected ?? saved)
+            if let credential = candidate.credential, credential != saved { try credential.save() }
             for task in pending.values { task.cancel() }
             pending.removeAll()
             session = candidate
