@@ -14,6 +14,28 @@ final class EpisodeDownload {
 /// The index and its audio files belong to one studio account (or to the guest).
 @MainActor @Observable
 final class EpisodeCollection {
+    struct BookmarkVersion: Codable, Comparable {
+        let modified: Double
+        let revision: String
+
+        static let legacy = Self(modified: 0, revision: "")
+
+        static func < (lhs: Self, rhs: Self) -> Bool {
+            (lhs.modified, lhs.revision) < (rhs.modified, rhs.revision)
+        }
+    }
+
+    struct BookmarkChange: Codable {
+        let episode: Episode?
+        let version: BookmarkVersion
+    }
+
+    struct BookmarkSnapshot: Codable {
+        let account: String?
+        let changes: [String: BookmarkChange]
+        let shows: [String: Show]
+    }
+
     private struct Bookmark: Codable {
         let episode: Episode
     }
@@ -25,10 +47,13 @@ final class EpisodeCollection {
 
     private struct Index: Codable {
         var bookmarks: [String: Bookmark] = [:]
+        // Missing on indexes written before paired bookmark sync.
+        var bookmarkVersions: [String: BookmarkVersion]?
         var downloads: [String: Download] = [:]
         var shows: [String: Show] = [:]
     }
 
+    let account: String?
     private let directory: URL
     private var index = Index()
     private let files = FileManager.default
@@ -36,6 +61,7 @@ final class EpisodeCollection {
     private(set) var loadError: Error?
 
     init(account: String?, root: URL = .applicationSupportDirectory) {
+        self.account = account
         let owner = account.map { "account-" + SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() } ?? "guest"
         directory = root.appending(path: "EpisodeCollections").appending(component: owner)
         do {
@@ -90,9 +116,39 @@ final class EpisodeCollection {
 
     func setSaved(_ saved: Bool, episode: Episode, show: Show?) throws {
         var next = index
+        let previous = index.bookmarkVersions?[episode.id]?.modified ?? 0
+        let version = BookmarkVersion(modified: max(Date().timeIntervalSince1970, previous.nextUp),
+                                      revision: UUID().uuidString)
+        if next.bookmarkVersions == nil { next.bookmarkVersions = [:] }
+        next.bookmarkVersions?[episode.id] = version
         next.bookmarks[episode.id] = saved ? Bookmark(episode: episode.offlineMetadata) : nil
         if let show { next.shows[show.id] = show }
         try commit(next)
+    }
+
+    func bookmarkSnapshot() -> BookmarkSnapshot {
+        let ids = Set(index.bookmarkVersions?.keys.map { $0 } ?? []).union(index.bookmarks.keys)
+        let changes = Dictionary(uniqueKeysWithValues: ids.map { id in
+            (id, BookmarkChange(episode: index.bookmarks[id]?.episode, version: index.bookmarkVersions?[id] ?? .legacy))
+        })
+        let showIDs = Set(index.bookmarks.values.map { $0.episode.showID })
+        return BookmarkSnapshot(account: account, changes: changes, shows: index.shows.filter { showIDs.contains($0.key) })
+    }
+
+    func mergeBookmarks(_ snapshot: BookmarkSnapshot, access: (Episode) -> Episode) throws {
+        guard account == snapshot.account else { return }
+        var next = index
+        var changed = false
+        for (id, incoming) in snapshot.changes {
+            let old = index.bookmarkVersions?[id] ?? (index.bookmarks[id] != nil ? .legacy : nil)
+            if let old, old >= incoming.version { continue }
+            if next.bookmarkVersions == nil { next.bookmarkVersions = [:] }
+            next.bookmarkVersions?[id] = incoming.version
+            next.bookmarks[id] = incoming.episode.map { Bookmark(episode: access($0.offlineMetadata)) }
+            if let episode = incoming.episode, let show = snapshot.shows[episode.showID] { next.shows[show.id] = show }
+            changed = true
+        }
+        if changed { try commit(next) }
     }
 
     func beginDownload(_ id: String) -> EpisodeDownload? {

@@ -3,13 +3,14 @@ import MediaPlayer
 import Observation
 import UIKit
 
-enum QueueSource { case latestEpisodes, saved, downloaded, show(String) }
+enum QueueSource: Hashable { case latestEpisodes, saved, downloaded, show(String) }
 
 @MainActor @Observable
 final class PodcastPlayer {
     private let library: PodcastLibrary
     @ObservationIgnored private let engine = AVPlayer()
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var listeningSync: Task<Void, Never>?
     @ObservationIgnored private var artworkTask: Task<Void, Never>?
     @ObservationIgnored private var nowPlayingArtwork: MPMediaItemArtwork?
     @ObservationIgnored private var tick: Any?
@@ -18,7 +19,7 @@ final class PodcastPlayer {
     @ObservationIgnored private var interruptionObserver: NSObjectProtocol?
     @ObservationIgnored private var lastSave: Double = 0
     private var owner = "guest"
-    private var source = QueueSource.latestEpisodes
+    private(set) var source = QueueSource.latestEpisodes
     private(set) var history = ListeningHistory()
     private(set) var current: Episode?
     private(set) var playing = false
@@ -53,6 +54,8 @@ final class PodcastPlayer {
         nowPlayingArtwork = nil
         expanded = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        listeningSync?.cancel()
+        listeningSync = nil
         owner = key
         restoreHistory()
     }
@@ -71,26 +74,51 @@ final class PodcastPlayer {
     }
 
     func mark(_ episode: Episode, played: Bool) async {
-        do {
-            if library.account != nil {
-                try await library.updatePlayed(played, for: episode)
-                history.clearLocalStatus(episode.id)
-            } else if played {
-                history.finish(episode.id)
-            } else {
-                history.markUnplayed(episode.id)
+        guard owner == (library.account.map { "account." + $0 } ?? "guest") else { return }
+        if played { history.finish(episode.id) } else { history.markUnplayed(episode.id) }
+        persist()
+        if current?.id == episode.id {
+            clearItem()
+            position = played ? duration : 0
+            publishNowPlaying()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+        synchronizeListening()
+    }
+
+    func refreshListeningWhileActive() async {
+        guard let account = library.account else { return }
+        useAccount(account)
+        while !Task.isCancelled, library.account == account {
+            synchronizeListening()
+            await listeningSync?.value
+            do { try await Task.sleep(for: .seconds(60)) } catch { return }
+        }
+    }
+
+    private func synchronizeListening() {
+        guard let account = library.account, owner == "account." + account, listeningSync == nil else { return }
+        listeningSync = Task {
+            defer { if !Task.isCancelled { listeningSync = nil } }
+            do {
+                let source = try await library.refreshPlayed(for: account)
+                var failed = [String: Bool]()
+                while !Task.isCancelled, library.account == account {
+                    let pending = history.pendingMarks.filter { failed[$0.key] != $0.value }
+                    if pending.isEmpty { return }
+                    for (id, played) in pending {
+                        guard history.hasPendingMark(id, played: played) else { continue }
+                        do { try await library.updatePlayed(played, id: id, using: source) }
+                        catch LibraryError.missingResource { failed[id] = played; continue }
+                        try Task.checkCancellation()
+                        guard library.account == account, source === library.session else { return }
+                        history.acknowledge(id, played: played)
+                        persist()
+                    }
+                }
+            } catch {
+                // Keep outstanding marks in this account's history for the next online sync.
             }
-            if current?.id == episode.id {
-                clearItem()
-                position = played ? duration : 0
-                publishNowPlaying()
-                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            }
-            persist()
-        } catch is CancellationError {
-            return
-        } catch {
-            message = String(localized: "Couldn’t update the listening status. Try again.")
         }
     }
 
@@ -133,9 +161,13 @@ final class PodcastPlayer {
                 else if let streamURL = episode.streamURL { url = streamURL }
                 else { url = try await library.sessionForRequest().stream(for: episode) }
                 try Task.checkCancellation()
+                #if os(watchOS)
+                try await activateWatchAudio()
+                #else
                 let audio = AVAudioSession.sharedInstance()
                 try audio.setCategory(.playback, mode: .spokenAudio)
                 try audio.setActive(true)
+                #endif
                 let item = AVPlayerItem(url: url)
                 engine.replaceCurrentItem(with: item)
                 observe(item)
@@ -145,7 +177,7 @@ final class PodcastPlayer {
                 }
                 try Task.checkCancellation()
                 loading = false
-                resume()
+                playCurrentItem()
                 loadArtwork(for: episode)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -177,6 +209,7 @@ final class PodcastPlayer {
         guard let current else { return }
         history.finish(current.id)
         persist()
+        synchronizeListening()
         clearItem() // Detach the finished item before starting its successor or saving progress.
         position = duration
         publishNowPlaying()
@@ -227,6 +260,35 @@ final class PodcastPlayer {
     private func resume() {
         guard let current, !loading else { return }
         guard engine.currentItem != nil else { start(current); return }
+        #if os(watchOS)
+        loading = true
+        loadTask = Task {
+            do {
+                try await activateWatchAudio()
+                loading = false
+                playCurrentItem()
+            } catch {
+                guard !Task.isCancelled else { return }
+                loading = false
+                message = String(localized: "Check the audio output on your watch and try again.")
+            }
+        }
+        #else
+        playCurrentItem()
+        #endif
+    }
+
+    #if os(watchOS)
+    private func activateWatchAudio() async throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+        try session.setPrefersInterruptionOnRouteDisconnect(true)
+        guard try await session.activate(options: []) else { throw LibraryError.noAudio }
+        try Task.checkCancellation()
+    }
+    #endif
+
+    private func playCurrentItem() {
         engine.playImmediately(atRate: speed)
         playing = true
         publishNowPlaying()
@@ -270,6 +332,15 @@ final class PodcastPlayer {
 
     private func loadArtwork(for episode: Episode) {
         let show = library.show(for: episode)
+        #if os(watchOS)
+        guard let address = WatchArtwork.address(episode.artwork, show?.artwork), let url = URL(string: address) else { return }
+        artworkTask = Task { [weak self] in
+            guard let image = await WatchArtwork.shared.image(at: url), !Task.isCancelled,
+                  let self, current?.id == episode.id else { return }
+            nowPlayingArtwork = Self.makeArtwork(from: image)
+            publishNowPlaying()
+        }
+        #else
         guard let address = episode.artwork ?? show?.artwork, let url = URL(string: address) else { return }
         artworkTask = Task { [weak self] in
             guard let (data, response) = try? await URLSession.shared.data(from: url),
@@ -279,6 +350,7 @@ final class PodcastPlayer {
             nowPlayingArtwork = Self.makeArtwork(from: image)
             publishNowPlaying()
         }
+        #endif
     }
 
     private nonisolated static func makeArtwork(from image: UIImage) -> MPMediaItemArtwork {

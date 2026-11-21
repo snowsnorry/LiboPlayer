@@ -9,7 +9,7 @@ enum StudioSite {
     }
 }
 
-struct Catalog {
+struct Catalog: Codable {
     let account: String?
     let shows: [Show]
     let categories: [StudioCategory]
@@ -144,6 +144,14 @@ final class StudioSession {
         guard let response = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let user = response["user"] as? [String: Any] else { throw LibraryError.unavailable }
         return user
+    }
+
+    func playedIDs() async throws -> Set<String> {
+        let user = try await profile()
+        guard let owner = credential?.accountID, StudioPayload.identifier(user["tgId"]) == owner else {
+            throw LibraryError.expired
+        }
+        return Set(StudioPayload.played(user["played"]))
     }
 
     private func readSubscriptions() async throws -> [String: String] {

@@ -39,6 +39,9 @@ struct LibraryScreen: View {
                 do { try await library.loadArchive() }
                 catch { if !Task.isCancelled { archiveError = LibraryError.message(for: error) } }
             }
+            .task(id: phase == .active ? library.account : nil) {
+                if phase == .active { await player.refreshListeningWhileActive() }
+            }
             .onChange(of: library.account) { _, id in
                 libraryPath = NavigationPath()
                 player.useAccount(id)

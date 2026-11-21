@@ -26,7 +26,7 @@ struct Show: Codable, Identifiable, Hashable {
     }
 }
 
-struct StudioCategory: Hashable, Identifiable {
+struct StudioCategory: Codable, Hashable, Identifiable {
     let id, name: String
 }
 
@@ -68,6 +68,20 @@ struct ListeningHistory: Codable {
     private var unplayed: Set<String>?
 
     init() {}
+
+    var pendingMarks: [String: Bool] {
+        var marks = Dictionary(uniqueKeysWithValues: completed.map { ($0, true) })
+        for id in unplayed ?? [] { marks[id] = false }
+        return marks
+    }
+
+    func hasPendingMark(_ id: String, played: Bool) -> Bool {
+        played ? completed.contains(id) : unplayed?.contains(id) == true
+    }
+
+    mutating func acknowledge(_ id: String, played: Bool) {
+        if played { completed.remove(id) } else { unplayed?.remove(id) }
+    }
 
     func isFinished(_ id: String, serverPlayed: Bool) -> Bool {
         if unplayed?.contains(id) == true { return false }

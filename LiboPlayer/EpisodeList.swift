@@ -76,14 +76,13 @@ struct EpisodeListRow: View {
                 Cover(artwork: episode.artwork ?? show?.artwork, radius: 8)
                     .frame(width: coverSize)
                 VStack(alignment: .leading, spacing: 4) {
-                    metadata(showsPodcastName ? show : nil)
+                    metadata(showsPodcastName ? show : nil, played: played)
                     Text(episode.name)
                         .font(.body.weight(started ? .regular : .semibold))
                         .lineLimit(typeSize.isAccessibilitySize ? 4 : 2)
                         .foregroundStyle(played ? .secondary : .primary)
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
-                        if played { Image(systemName: "checkmark.circle.fill").accessibilityLabel("Played") }
                         if saved { Image(systemName: "bookmark.fill").accessibilityLabel("Saved") }
                         if let download { EpisodeDownloadRing(download: download) }
                         else if downloaded {
@@ -103,6 +102,7 @@ struct EpisodeListRow: View {
             EpisodePlaybackButton(episode: episode, source: source)
                 .padding(.leading, coverSize + spacing)
         }
+        .opacity(played ? 0.75 : 1)
         .padding(.vertical, 4)
         .swipeActions(edge: .leading) {
             Button {
@@ -135,8 +135,9 @@ struct EpisodeListRow: View {
         }
     }
 
-    private func metadata(_ show: Show?) -> some View {
+    private func metadata(_ show: Show?, played: Bool) -> some View {
         HStack(spacing: 5) {
+            if played { Image(systemName: "checkmark").accessibilityLabel("Played") }
             if episode.published > 0 {
                 Text(Date(timeIntervalSince1970: episode.published), format: .dateTime.day().month().year())
                     .layoutPriority(1)

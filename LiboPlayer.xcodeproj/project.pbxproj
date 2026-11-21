@@ -6,14 +6,70 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		200000000000000000000007 /* LiboWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* LiboWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2000000000000000000000C8 /* LiboPlayer/PodcastLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000064 /* LiboPlayer/PodcastLibrary.swift */; };
+		2000000000000000000000C9 /* LiboPlayer/EpisodeCollection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000065 /* LiboPlayer/EpisodeCollection.swift */; };
+		2000000000000000000000CA /* LiboPlayer/PodcastPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000066 /* LiboPlayer/PodcastPlayer.swift */; };
+		2000000000000000000000CB /* LiboPlayer/Episode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000067 /* LiboPlayer/Episode.swift */; };
+		2000000000000000000000CC /* LiboPlayer/StudioPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000068 /* LiboPlayer/StudioPayload.swift */; };
+		2000000000000000000000CD /* LiboPlayer/StudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000069 /* LiboPlayer/StudioSession.swift */; };
+		2000000000000000000000CE /* LiboPlayer/StudioCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000006A /* LiboPlayer/StudioCredential.swift */; };
+		2000000000000000000000CF /* LiboPlayer/EpisodeAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000006B /* LiboPlayer/EpisodeAudio.swift */; };
+		2000000000000000000000D0 /* LiboPlayer/CompanionSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000006C /* LiboPlayer/CompanionSync.swift */; };
+		2000000000000000000000D1 /* LiboPlayer/Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000006D /* LiboPlayer/Localizable.xcstrings */; };
+		2000000000000000000000D2 /* LiboPlayer/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000006E /* LiboPlayer/Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		200000000000000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 200000000000000000000001;
+			remoteInfo = LiboWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		200000000000000000000006 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				200000000000000000000007 /* LiboWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		100000000000000000000006 /* LiboPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LiboPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		200000000000000000000002 /* LiboWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LiboWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		200000000000000000000064 /* LiboPlayer/PodcastLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/PodcastLibrary.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000065 /* LiboPlayer/EpisodeCollection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/EpisodeCollection.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000066 /* LiboPlayer/PodcastPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/PodcastPlayer.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000067 /* LiboPlayer/Episode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/Episode.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000068 /* LiboPlayer/StudioPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/StudioPayload.swift; sourceTree = SOURCE_ROOT; };
+		200000000000000000000069 /* LiboPlayer/StudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/StudioSession.swift; sourceTree = SOURCE_ROOT; };
+		20000000000000000000006A /* LiboPlayer/StudioCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/StudioCredential.swift; sourceTree = SOURCE_ROOT; };
+		20000000000000000000006B /* LiboPlayer/EpisodeAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/EpisodeAudio.swift; sourceTree = SOURCE_ROOT; };
+		20000000000000000000006C /* LiboPlayer/CompanionSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiboPlayer/CompanionSync.swift; sourceTree = SOURCE_ROOT; };
+		20000000000000000000006D /* LiboPlayer/Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = LiboPlayer/Localizable.xcstrings; sourceTree = SOURCE_ROOT; };
+		20000000000000000000006E /* LiboPlayer/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = LiboPlayer/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		100000000000000000000004 /* LiboPlayer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LiboPlayer;
+			sourceTree = "<group>";
+		};
+		200000000000000000000003 /* LiboWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiboWatch;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,8 +88,10 @@
 		100000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
+				200000000000000000000003 /* LiboWatch */,
 				100000000000000000000004 /* LiboPlayer */,
 				100000000000000000000003 /* Products */,
+				33A7B09E30B20C510078DB5F /* Shared with Apple Watch */,
 			);
 			sourceTree = "<group>";
 		};
@@ -41,8 +99,27 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000006 /* LiboPlayer.app */,
+				200000000000000000000002 /* LiboWatch.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		33A7B09E30B20C510078DB5F /* Shared with Apple Watch */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000064 /* LiboPlayer/PodcastLibrary.swift */,
+				200000000000000000000065 /* LiboPlayer/EpisodeCollection.swift */,
+				200000000000000000000066 /* LiboPlayer/PodcastPlayer.swift */,
+				200000000000000000000067 /* LiboPlayer/Episode.swift */,
+				200000000000000000000068 /* LiboPlayer/StudioPayload.swift */,
+				200000000000000000000069 /* LiboPlayer/StudioSession.swift */,
+				20000000000000000000006A /* LiboPlayer/StudioCredential.swift */,
+				20000000000000000000006B /* LiboPlayer/EpisodeAudio.swift */,
+				20000000000000000000006C /* LiboPlayer/CompanionSync.swift */,
+				20000000000000000000006D /* LiboPlayer/Localizable.xcstrings */,
+				20000000000000000000006E /* LiboPlayer/Assets.xcassets */,
+			);
+			name = "Shared with Apple Watch";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +132,12 @@
 				100000000000000000000007 /* Sources */,
 				100000000000000000000008 /* Frameworks */,
 				100000000000000000000009 /* Resources */,
+				200000000000000000000006 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				200000000000000000000008 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				100000000000000000000004 /* LiboPlayer */,
@@ -66,6 +145,25 @@
 			name = LiboPlayer;
 			productName = LiboPlayer;
 			productReference = 100000000000000000000006 /* LiboPlayer.app */;
+			productType = "com.apple.product-type.application";
+		};
+		200000000000000000000001 /* LiboWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 20000000000000000000000A /* Build configuration list for PBXNativeTarget "LiboWatch" */;
+			buildPhases = (
+				200000000000000000000004 /* Sources */,
+				200000000000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				200000000000000000000003 /* LiboWatch */,
+			);
+			name = LiboWatch;
+			productName = LiboWatch;
+			productReference = 200000000000000000000002 /* LiboWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -90,6 +188,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				200000000000000000000001 /* LiboWatch */,
 				100000000000000000000005 /* LiboPlayer */,
 			);
 		};
@@ -103,6 +202,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		200000000000000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2000000000000000000000D1 /* LiboPlayer/Localizable.xcstrings in Resources */,
+				2000000000000000000000D2 /* LiboPlayer/Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -113,7 +221,31 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		200000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2000000000000000000000C8 /* LiboPlayer/PodcastLibrary.swift in Sources */,
+				2000000000000000000000C9 /* LiboPlayer/EpisodeCollection.swift in Sources */,
+				2000000000000000000000CA /* LiboPlayer/PodcastPlayer.swift in Sources */,
+				2000000000000000000000CB /* LiboPlayer/Episode.swift in Sources */,
+				2000000000000000000000CC /* LiboPlayer/StudioPayload.swift in Sources */,
+				2000000000000000000000CD /* LiboPlayer/StudioSession.swift in Sources */,
+				2000000000000000000000CE /* LiboPlayer/StudioCredential.swift in Sources */,
+				2000000000000000000000CF /* LiboPlayer/EpisodeAudio.swift in Sources */,
+				2000000000000000000000D0 /* LiboPlayer/CompanionSync.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		200000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 200000000000000000000001 /* LiboWatch */;
+			targetProxy = 200000000000000000000009 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		100000000000000000000010 /* Debug */ = {
@@ -241,6 +373,50 @@
 			};
 			name = Release;
 		};
+		20000000000000000000000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = WatchAccent;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SJD789A8Q3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WatchInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Libo Player";
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = app.liboplayer.ios.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		20000000000000000000000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = WatchAccent;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SJD789A8Q3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WatchInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Libo Player";
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = app.liboplayer.ios.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -258,6 +434,15 @@
 			buildConfigurations = (
 				100000000000000000000014 /* Debug */,
 				100000000000000000000015 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		20000000000000000000000A /* Build configuration list for PBXNativeTarget "LiboWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				20000000000000000000000B /* Debug */,
+				20000000000000000000000C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

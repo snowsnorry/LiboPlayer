@@ -36,10 +36,14 @@ enum StudioPayload {
     }
 
     private static func artwork(_ row: Row, fallback: String) -> String? {
+        #if os(watchOS)
+        return WatchArtwork.address(row["pic_200"] as? String, row["pic_500"] as? String, row[fallback] as? String)
+        #else
         for key in ["pic_500", "pic_200", fallback] {
             if let url = row[key] as? String, !url.isEmpty { return url }
         }
         return nil
+        #endif
     }
 
     private static func embeddedRows(_ name: String, in data: Data) throws -> [Row]? {

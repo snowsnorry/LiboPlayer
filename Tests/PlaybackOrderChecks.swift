@@ -36,6 +36,16 @@ struct PlaybackOrderChecks {
     private static func checkListeningFilters() throws {
         let oldData = Data(#"{"positions":{"История":83},"completed":["Финал"]}"#.utf8)
         var history = try JSONDecoder().decode(ListeningHistory.self, from: oldData)
+        precondition(history.pendingMarks == ["Финал": true])
+        var pending = history
+        pending.markUnplayed("Финал")
+        pending.acknowledge("Финал", played: true)
+        precondition(pending.pendingMarks == ["Финал": false])
+        pending.positions["Финал"] = 12
+        pending.acknowledge("Финал", played: false)
+        precondition(pending.pendingMarks.isEmpty && pending.positions["Финал"] == 12)
+        precondition(pending.isFinished("Финал", serverPlayed: true))
+        precondition(!pending.isFinished("Финал", serverPlayed: false))
         let partial = episode("История", show: "A", date: 20)
         let played = episode("Финал", show: "A", date: 10)
         let serverPlayed = episode("История науки", show: "B", date: 5)

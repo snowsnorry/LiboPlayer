@@ -2,6 +2,7 @@ import Foundation
 
 private final class FixtureAPI: URLProtocol {
     private static var followed = true
+    private static var played = true
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
@@ -34,7 +35,7 @@ private final class FixtureAPI: URLProtocol {
                 return
             case "Bearer member-fixture":
                 precondition(request.value(forHTTPHeaderField: "webAuthed") == "true")
-                body = #"{"user":{"tgId":123,"paid":true,"guide":false,"played":{"a":true,"b":false}}}"#
+                body = #"{"user":{"tgId":123,"paid":true,"guide":false,"played":{"a":\#(Self.played),"b":false}}}"#
             case "Bearer guest-fixture":
                 precondition(request.value(forHTTPHeaderField: "webAuthed") == nil)
                 body = #"{"user":{"paid":false,"guide":false}}"#
@@ -59,6 +60,7 @@ private final class FixtureAPI: URLProtocol {
             precondition(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == "one & two")
             body = #"{"items":[{"id":"a","feed":"show"}],"items2":[{"id":"a","feed":"show"}]}"#
         case ("POST", "/api/played"), ("DELETE", "/api/played/a"):
+            Self.played = request.httpMethod == "POST"
             precondition(bearer == "Bearer member-fixture")
             status = 204
         default: preconditionFailure("Unexpected fixture request")
@@ -107,8 +109,12 @@ struct StudioSessionChecks {
         precondition(matches.count == 1 && matches[0].description == nil)
         let description = try await session.episodeDescription(matches[0].id)
         precondition(description == "<p>Complete notes</p>")
-        try await session.setPlayed(true, id: "a")
         try await session.setPlayed(false, id: "a")
+        let cleared = try await session.playedIDs()
+        precondition(cleared.isEmpty)
+        try await session.setPlayed(true, id: "a")
+        let restored = try await session.playedIDs()
+        precondition(restored == ["a"])
         do {
             _ = try await session.catalog(using: StudioCredential(token: "expired-fixture", signedIn: true))
             preconditionFailure("Rejected member session silently became a guest")
