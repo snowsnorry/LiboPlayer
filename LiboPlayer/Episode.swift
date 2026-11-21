@@ -1,15 +1,50 @@
 import Foundation
 
-struct Show: Decodable, Identifiable, Hashable {
+struct Show: Codable, Identifiable, Hashable {
     let id, name: String
     let artwork: String?
+    var lastEpisode: Double? = nil
+
+    static func recentlyUpdated(_ followed: [Self], archives: [String: [Episode]]) -> [Self] {
+        followed.compactMap { show -> Self? in
+            var result = show
+            if let episodes = archives[show.id] {
+                // PodcastLibrary stores each archive newest first, in the same order as Latest Episodes.
+                result.lastEpisode = episodes.first?.published
+            }
+            guard let date = result.lastEpisode, date > 0 else { return nil }
+            return result
+        }.sorted { lhs, rhs in
+            if lhs.lastEpisode == rhs.lastEpisode { return alphabetical(lhs, rhs) }
+            return (lhs.lastEpisode ?? 0) > (rhs.lastEpisode ?? 0)
+        }
+    }
+
+    static func alphabetical(_ lhs: Self, _ rhs: Self) -> Bool {
+        let order = lhs.name.localizedStandardCompare(rhs.name)
+        return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+    }
 }
 
-struct Episode: Decodable, Identifiable, Hashable {
+struct StudioCategory: Hashable, Identifiable {
+    let id, name: String
+}
+
+struct Episode: Codable, Identifiable, Hashable {
     let id, showID, name: String
     let published, duration: Double
-    let locked, played: Bool
-    let artwork, track: String?
+    var locked: Bool
+    let played: Bool
+    let artwork: String?
+    var track: String?
+    var access: Access? = nil
+    enum Access: String, Codable { case subscription, guide }
+
+    var offlineMetadata: Self {
+        var copy = self
+        copy.track = nil
+        return copy
+    }
 
     var streamURL: URL? {
         guard let track, let url = URL(string: track), url.scheme == "https" else { return nil }

@@ -42,21 +42,41 @@ enum StudioPayload {
         return nil
     }
 
-    static func shows(from data: Data) throws -> [Show] {
-        // The official home page embeds the catalog as JSON in its own script element.
-        guard let html = String(data: data, encoding: .utf8),
-              let start = html.range(of: #"<script\b[^>]*>\s*(?:let|const|var)\s+feeds\s*=\s*"#,
-                                     options: .regularExpression),
-              let end = html.range(of: "</script>", range: start.upperBound..<html.endIndex) else {
+    private static func embeddedRows(_ name: String, in data: Data) throws -> [Row]? {
+        guard let html = String(data: data, encoding: .utf8) else { throw LibraryError.unavailable }
+        let pattern = #"<script\b[^>]*>\s*(?:let|const|var)\s+"# + name + #"\s*=\s*"#
+        guard let start = html.range(of: pattern, options: .regularExpression) else { return nil }
+        guard let end = html.range(of: "</script>", range: start.upperBound..<html.endIndex) else {
             throw LibraryError.unavailable
         }
         let payload = html[start.upperBound..<end.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
         let json = payload.hasSuffix(";") ? payload.dropLast() : payload[...]
-        let feeds = try rows(from: Data(json.utf8))
+        return try rows(from: Data(json.utf8))
+    }
+
+    static func shows(from data: Data) throws -> [Show] {
+        guard let feeds = try embeddedRows("feeds", in: data) else { throw LibraryError.unavailable }
+        // The catalog's lastEpisode is an old ordering hint. The fresh list contains real publications.
+        let fresh = (try? embeddedRows("fresh", in: data)) ?? []
+        var published: [String: Double] = [:]
+        for row in fresh where row["active"] as? Bool != false {
+            guard let id = row["feed"] as? String else { continue }
+            let date = timestamp(row["createdAt"])
+            if date > (published[id] ?? 0) { published[id] = date }
+        }
         return try feeds.sorted { timestamp($0["lastEpisode"]) > timestamp($1["lastEpisode"]) }.map { feed in
             guard let id = feed["id"] as? String, let name = feed["name"] as? String else { throw LibraryError.unavailable }
-            return Show(id: id, name: name, artwork: artwork(feed, fallback: "image"))
+            return Show(id: id, name: name, artwork: artwork(feed, fallback: "image"), lastEpisode: published[id])
         }
+    }
+
+    static func categories(from data: Data) throws -> [StudioCategory] {
+        var seen = Set<String>()
+        return try (embeddedRows("tags", in: data) ?? []).compactMap { row in
+            guard row["active"] as? Bool != false, let id = identifier(row["id"]), let name = row["name"] as? String,
+                  seen.insert(id).inserted else { return nil }
+            return StudioCategory(id: id, name: name)
+        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     static func locked(_ row: Row, paid: Bool, guide: Bool) -> Bool {
@@ -73,7 +93,8 @@ enum StudioPayload {
             return Episode(id: id, showID: feed, name: name.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "Untitled Episode"),
                            published: timestamp(row["createdAt"]), duration: number(row["length"]),
                            locked: locked, played: flag(row["played"]), artwork: artwork(row, fallback: "pic"),
-                           track: locked ? nil : row["track"] as? String)
+                           track: locked ? nil : row["track"] as? String,
+                           access: flag(row["paid"]) ? (flag(row["audioguide"]) ? .guide : .subscription) : nil)
         }
     }
 }

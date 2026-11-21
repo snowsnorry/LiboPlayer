@@ -16,7 +16,11 @@ private final class FixtureAPI: URLProtocol {
         case ("GET", "/"), ("GET", ""):
             precondition(bearer == nil)
             headers["Content-Type"] = "text/html"
-            body = #"<script>let feeds=[{"id":"show","name":"Show","pic_200":"cover"}]</script>"#
+            body = #"""
+            <script>let feeds=[{"id":"show","name":"Show","pic_200":"cover","lastEpisode":{"_seconds":100}},{"id":"other","name":"Other","lastEpisode":{"_seconds":50}}]</script>
+            <script>let fresh=[{"feed":"show","createdAt":{"_seconds":210}},{"feed":"show","createdAt":{"_seconds":200}},{"feed":"show","active":false,"createdAt":{"_seconds":500}}]</script>
+            <script>let tags=[{"id":"t","name":"Technology"},{"id":"t","name":"Technology"},{"id":"unused","name":"Hidden","active":false}]</script>
+            """#
         case ("POST", "/authPlayer"):
             precondition(bearer == nil)
             body = #"{"token":"guest-fixture"}"#
@@ -42,10 +46,15 @@ private final class FixtureAPI: URLProtocol {
             precondition(bearer == "Bearer member-fixture")
             Self.followed = request.httpMethod == "POST"
             status = 204
+        case ("GET", "/api/tagsRelations"):
+            precondition(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == "t")
+            body = #"[{"feed":"show"},{"feed":"show"},{"feed":"other","active":false}]"#
         case ("GET", "/api/items/a"):
-            body = #"{"paid":true,"track":"https://example.org/audio"}"#
+            body = #"{"feed":"show","name":"A","paid":true,"track":"https://example.org/audio"}"#
         case ("GET", "/api/episodes/show"):
-            body = #"[{"id":"a","name":"A","paid":true,"length":"65","track":"https://example.org/audio"},{"id":"a"},{"active":false,"id":"b"},{"id":"c","paid":true,"audioguide":true}]"#
+            body = #"[{"id":"a","name":"A","paid":true,"length":"65","track":"https://example.org/audio","createdAt":{"_seconds":300}},{"id":"a"},{"active":false,"id":"b"},{"id":"c","paid":true,"audioguide":true}]"#
+        case ("GET", "/api/episodes/other"):
+            body = #"[{"id":"d","name":"New release","createdAt":{"_seconds":400}}]"#
         case ("GET", "/api/suggest"):
             precondition(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == "one & two")
             body = #"{"items":[{"id":"a","feed":"show"}],"items2":[{"id":"a","feed":"show"}]}"#
@@ -73,8 +82,19 @@ struct StudioSessionChecks {
         let catalog = try await session.catalog(using: member)
         precondition(catalog.account == "123" && catalog.played == ["a"] && catalog.subscriptions["show"] == "sub")
         let show = catalog.shows[0]
+        precondition(session.credential?.accountID == "123")
+        let recent = Show.recentlyUpdated(catalog.shows, archives: [:])
+        precondition(recent.map(\.id) == ["show"] && recent.first?.lastEpisode == 210)
+        precondition(catalog.categories.map(\.name) == ["Technology"])
+        let members = try await session.categoryShows(catalog.categories[0])
+        precondition(members == ["show"])
         let rows = try await session.episodes(for: show)
         precondition(rows.count == 2 && rows[0].duration == 65 && rows[0].streamURL != nil && rows[1].locked)
+        let other = catalog.shows[1]
+        let archives = [show.id: rows.sorted(by: Episode.precedes), other.id: try await session.episodes(for: other)]
+        let updated = Show.recentlyUpdated(catalog.shows, archives: archives)
+        precondition(updated.map(\.id) == [other.id, show.id] && updated.compactMap(\.lastEpisode) == [400, 300])
+        precondition(Show.recentlyUpdated([show], archives: [show.id: []]).isEmpty)
         let unfollowed = try await session.setFollow(false, show: show)
         let followed = try await session.setFollow(true, show: show)
         precondition(unfollowed.isEmpty && followed["show"] == "sub")
@@ -98,6 +118,6 @@ struct StudioSessionChecks {
         precondition(guest.account == nil && session.credential?.token == "guest-fixture")
         let guestRows = try await session.episodes(for: show)
         precondition(guestRows[0].locked && guestRows[0].streamURL == nil)
-        print("Native catalog, episodes, search, playback marks and credential expiry checks passed.")
+        print("Native catalog, categories, episodes, search, playback marks and credential expiry checks passed.")
     }
 }

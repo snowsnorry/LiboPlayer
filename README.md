@@ -2,6 +2,12 @@
 
 Libo Player is a native iPhone app for listening to [Libo/Libo podcasts](https://play.libolibo.me/). Browse shows, search for an episode by title, or sign in with Telegram to see the latest episodes from the shows you follow.
 
+## Library
+
+Library contains followed Shows, Categories, Saved, Downloaded and Latest Episodes. Recently Updated opens the same show pages as the catalog. In an episode list, swipe right to change its played status, or swipe left to save or download it. Either action can be undone independently.
+
+Downloaded audio plays offline after restarting the app. Guest collections and each signed-in account have separate storage. Saved bookmarks are stored on this iPhone and can be added or removed offline.
+
 ## Listening
 
 - Filter episodes by played status and mark individual episodes as played or unplayed.
@@ -22,7 +28,7 @@ Use Xcode on macOS with the iOS 26.1 SDK or later and an iPhone or simulator run
 
 1. Open `LiboPlayer.xcodeproj` in Xcode.
 2. Select the `LiboPlayer` scheme and an iPhone simulator. For a physical iPhone, select your device and set your development team under **Signing & Capabilities**. If needed, choose a bundle identifier available to your team.
-3. Press **⌘R** to build and run. To follow shows, open the account button on the **Shows** tab and sign in with Telegram.
+3. Press **⌘R** to build and run. To follow shows, open the account button on the **All Shows** tab and sign in with Telegram.
 
 ## Run the playback checks
 
@@ -42,4 +48,14 @@ These checks use local fixtures for guest renewal, expired member sessions, cata
 mkdir -p build
 xcrun swiftc LiboPlayer/Episode.swift LiboPlayer/StudioCredential.swift LiboPlayer/StudioPayload.swift LiboPlayer/StudioSession.swift Tests/StudioSessionChecks.swift -o build/studio-checks
 ./build/studio-checks
+```
+
+## Run the offline collection checks
+
+These checks use a temporary directory to verify independent saves and downloads, account isolation, retry, and restoration after relaunch.
+
+```sh
+mkdir -p build
+xcrun swiftc LiboPlayer/Episode.swift LiboPlayer/EpisodeCollection.swift Tests/EpisodeCollectionChecks.swift -o build/collection-checks
+./build/collection-checks
 ```

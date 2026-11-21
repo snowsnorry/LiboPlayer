@@ -13,7 +13,7 @@ struct SignInPage: View {
         NavigationStack {
             LoginView(controller: controller)
                 .ignoresSafeArea(edges: .bottom)
-                .navigationTitle("Libo/Libo Account").navigationBarTitleDisplayMode(.inline)
+                .leadingTitle(Text("Libo/Libo Account"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }.disabled(saving)

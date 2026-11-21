@@ -19,10 +19,73 @@ final class PodcastLibrary {
     private(set) var session = StudioSession()
     @ObservationIgnored private var pending: [String: Task<[Episode], Error>] = [:]
 
-    func refresh() async {
+    private(set) var collection: EpisodeCollection
+    private(set) var categories: [StudioCategory] = []
+    private(set) var categoryMembers: [String: Set<String>] = [:]
+
+    init() {
+        let owner = (try? StudioCredential.saved())?.accountID
+        account = owner
+        collection = EpisodeCollection(account: owner)
+        if let error = collection.loadError { message = error.localizedDescription }
+    }
+
+    var followedShows: [Show] { shows.filter { subscriptions[$0.id] != nil } }
+    func followedShows(in category: StudioCategory) -> [Show] {
+        guard let members = categoryMembers[category.id] else { return [] }
+        return followedShows.filter { members.contains($0.id) }.sorted(by: Show.alphabetical)
+    }
+
+    func loadCategories() async throws {
+        let source = try await sessionForRequest()
+        for category in categories where categoryMembers[category.id] == nil {
+            try Task.checkCancellation()
+            let members = try await source.categoryShows(category)
+            guard source === session else { throw CancellationError() }
+            categoryMembers[category.id] = members
+        }
+    }
+
+    func show(for episode: Episode) -> Show? {
+        shows.first { $0.id == episode.showID } ?? collection.cachedShow(episode.showID)
+    }
+
+    func setSaved(_ saved: Bool, for episode: Episode) {
+        do { try collection.setSaved(saved, episode: episode, show: show(for: episode)) }
+        catch { message = error.localizedDescription }
+    }
+
+    func toggleDownload(_ episode: Episode) async {
+        let shelf = collection
+        do {
+            if shelf.localURL(episode.id) != nil {
+                try shelf.removeDownload(episode.id)
+                return
+            }
+            guard !episode.locked else { throw LibraryError.locked }
+            guard shelf.beginDownload(episode.id) else { return }
+            defer { shelf.endDownload(episode.id) }
+            let source = try await sessionForRequest()
+            guard shelf === collection else { return }
+            let url = try await source.stream(for: episode)
+            let audioFile = try await EpisodeAudio.download(from: url)
+            defer { try? FileManager.default.removeItem(at: audioFile) }
+            guard shelf === collection else { return }
+            let current = session.withCurrentAccess(episode)
+            guard !current.locked else { throw LibraryError.locked }
+            try shelf.install(audioFile, episode: current, show: show(for: episode), extension: audioFile.pathExtension)
+        } catch {
+            if shelf === collection { message = (error as? LibraryError)?.errorDescription ?? String(localized: "Couldn’t update the download. Try again.") }
+        }
+    }
+
+    func refresh(quietIfCached: Bool = false) async {
         guard !busy, changing.isEmpty, updatingPlayed.isEmpty else { return }
         do { _ = try await reloadCatalog() }
-        catch { if !Task.isCancelled { message = LibraryError.message(for: error) } }
+        catch {
+            let hasOfflineContent = !collection.saved.isEmpty || !collection.downloaded.isEmpty
+            if !Task.isCancelled && !(quietIfCached && hasOfflineContent) { message = LibraryError.message(for: error) }
+        }
     }
 
     func sessionForRequest() async throws -> StudioSession {
@@ -50,7 +113,14 @@ final class PodcastLibrary {
             session = candidate
             episodes.removeAll()
             shows = catalog.shows
+            if account != catalog.account {
+                collection = EpisodeCollection(account: catalog.account)
+            }
+            categories = catalog.categories
+            categoryMembers = [:]
             account = catalog.account
+            do { try collection.updateAccess(candidate.withCurrentAccess) }
+            catch { message = error.localizedDescription }
             subscriptions = catalog.subscriptions
             serverPlayed = Set(catalog.played)
             playedChanges.removeAll()

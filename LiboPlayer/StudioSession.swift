@@ -12,14 +12,16 @@ enum StudioSite {
 struct Catalog {
     let account: String?
     let shows: [Show]
+    let categories: [StudioCategory]
     let subscriptions: [String: String]
     let played: [String]
 }
 
 enum LibraryError: LocalizedError {
-    case unavailable, timedOut, offline, expired, noAudio, locked
+    case unavailable, timedOut, offline, expired, noAudio, locked, missingResource
     var errorDescription: String? {
         switch self {
+        case .missingResource: String(localized: "The requested item is no longer available.")
         case .unavailable: String(localized: "Couldn’t load Libo/Libo. Try again.")
         case .timedOut: String(localized: "Libo/Libo took too long to respond. Try again.")
         case .offline: String(localized: "You’re offline. Check your internet connection and try again.")
@@ -84,6 +86,7 @@ final class StudioSession {
         }
         let (data, response) = try await transport.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw LibraryError.unavailable }
+        if http.statusCode == 404 { throw LibraryError.missingResource }
         if http.statusCode == 401 { throw LibraryError.expired }
         if (300..<400).contains(http.statusCode), let location = http.value(forHTTPHeaderField: "Location"),
            let url = URL(string: location, relativeTo: endpoint)?.absoluteURL,
@@ -121,16 +124,18 @@ final class StudioSession {
         }
         let account = StudioPayload.identifier(user["tgId"])
         if credential?.signedIn == true && account == nil { throw LibraryError.expired }
-        if let current = credential, account != nil && !current.signedIn {
-            credential = StudioCredential(token: current.token, signedIn: true)
+        if let current = credential, let account {
+            credential = StudioCredential(token: current.token, signedIn: true, accountID: account)
         }
         let subscriptions = try await readSubscriptions()
-        let shows = try StudioPayload.shows(from: await request([]))
+        let page = try await request([])
+        let shows = try StudioPayload.shows(from: page)
+        let categories = try StudioPayload.categories(from: page)
         paid = StudioPayload.flag(user["paid"])
         guide = StudioPayload.flag(user["guide"])
         isAvailable = true
         Logger(subsystem: "app.liboplayer.ios", category: "StudioSession").notice("Native catalog loaded")
-        return Catalog(account: account, shows: shows, subscriptions: subscriptions,
+        return Catalog(account: account, shows: shows, categories: categories, subscriptions: subscriptions,
                        played: StudioPayload.played(user["played"]))
     }
 
@@ -171,6 +176,20 @@ final class StudioSession {
         guard !StudioPayload.locked(row, paid: paid, guide: guide) else { throw LibraryError.locked }
         guard let track = row["track"] as? String, let url = URL(string: track), url.scheme == "https" else { throw LibraryError.noAudio }
         return url
+    }
+
+    func withCurrentAccess(_ episode: Episode) -> Episode {
+        guard let access = episode.access else { return episode }
+        var current = episode
+        current.locked = !(access == .guide ? guide : paid)
+        return current
+    }
+
+    func categoryShows(_ category: StudioCategory) async throws -> Set<String> {
+        let data = try await api(["tagsRelations"], query: [URLQueryItem(name: "tag", value: category.id)])
+        return Set(try StudioPayload.rows(from: data).compactMap { row in
+            row["active"] as? Bool == false ? nil : StudioPayload.identifier(row["feed"])
+        })
     }
 
     func setPlayed(_ played: Bool, id: String) async throws {

@@ -3,7 +3,7 @@ import MediaPlayer
 import Observation
 import UIKit
 
-enum QueueSource { case library, show(String) }
+enum QueueSource { case latestEpisodes, saved, downloaded, show(String) }
 
 @MainActor @Observable
 final class PodcastPlayer {
@@ -18,7 +18,7 @@ final class PodcastPlayer {
     @ObservationIgnored private var interruptionObserver: NSObjectProtocol?
     @ObservationIgnored private var lastSave: Double = 0
     private var owner = "guest"
-    private var source = QueueSource.library
+    private var source = QueueSource.latestEpisodes
     private(set) var history = ListeningHistory()
     private(set) var current: Episode?
     private(set) var playing = false
@@ -31,6 +31,7 @@ final class PodcastPlayer {
 
     init(library: PodcastLibrary) {
         self.library = library
+        owner = library.account.map { "account." + $0 } ?? "guest"
         restoreHistory()
         tick = engine.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 600), queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.updateClock() }
@@ -125,7 +126,8 @@ final class PodcastPlayer {
         loadTask = Task {
             do {
                 let url: URL
-                if let streamURL = episode.streamURL { url = streamURL }
+                if let local = library.collection.localURL(episode.id) { url = local }
+                else if let streamURL = episode.streamURL { url = streamURL }
                 else { url = try await library.sessionForRequest().stream(for: episode) }
                 try Task.checkCancellation()
                 let audio = AVAudioSession.sharedInstance()
@@ -180,7 +182,9 @@ final class PodcastPlayer {
             do {
                 let ordered: [Episode]
                 switch source {
-                case .library:
+                case .saved: ordered = library.collection.saved
+                case .downloaded: ordered = library.collection.downloaded
+                case .latestEpisodes:
                     if !library.archiveReady { try await library.loadArchive() }
                     ordered = library.feed
                 case .show(let id):
@@ -262,7 +266,7 @@ final class PodcastPlayer {
     }
 
     private func loadArtwork(for episode: Episode) {
-        let show = library.shows.first { $0.id == episode.showID }
+        let show = library.show(for: episode)
         guard let address = episode.artwork ?? show?.artwork, let url = URL(string: address) else { return }
         artworkTask = Task { [weak self] in
             guard let (data, response) = try? await URLSession.shared.data(from: url),
@@ -282,7 +286,7 @@ final class PodcastPlayer {
         guard let current else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: current.name,
-            MPMediaItemPropertyArtist: library.shows.first { $0.id == current.showID }?.name ?? "",
+            MPMediaItemPropertyArtist: library.show(for: current)?.name ?? "",
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: playing ? speed : 0

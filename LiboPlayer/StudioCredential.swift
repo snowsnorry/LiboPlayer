@@ -4,6 +4,7 @@ import Security
 struct StudioCredential: Codable, Equatable {
     let token: String
     let signedIn: Bool
+    var accountID: String? = nil
 
     private static let item: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,

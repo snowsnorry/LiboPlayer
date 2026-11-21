@@ -42,8 +42,8 @@ struct EpisodeList: View {
     }
 
     private var showsPodcastName: Bool {
-        if case .library = source { return true }
-        return false
+        if case .show = source { return false }
+        return true
     }
 }
 
@@ -56,22 +56,44 @@ struct EpisodeListRow: View {
 
     var body: some View {
         let played = player.isFinished(episode)
-        let show = library.shows.first { $0.id == episode.showID }
+        let saved = library.collection.isSaved(episode.id)
+        let downloaded = library.collection.localURL(episode.id) != nil
+        let downloading = library.collection.downloading.contains(episode.id)
+        let show = library.show(for: episode)
         Button { player.select(episode, from: source) } label: {
-            EpisodeRow(episode: episode, show: show, showsPodcastName: showsPodcastName, played: played,
+            EpisodeRow(episode: episode, show: show, showsPodcastName: showsPodcastName, played: played, saved: saved, downloaded: downloaded,
                        resumePosition: played ? 0 : player.history.resume(episode),
-                       isCurrent: player.current?.id == episode.id)
+                       isCurrent: player.current?.id == episode.id, downloading: downloading)
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .trailing) {
+        .swipeActions(edge: .leading) {
             Button {
                 Task { await player.mark(episode, played: !played) }
             } label: {
-                if played { Label("Mark as Unplayed", systemImage: "arrow.counterclockwise") }
-                else { Label("Mark as Played", systemImage: "checkmark") }
+                Image(systemName: played ? "arrow.counterclockwise" : "checkmark")
             }
-            .tint(played ? .indigo : .accentColor)
+            .accessibilityLabel(played ? Text("Mark as Unplayed") : Text("Mark as Played"))
+            .tint(.purple)
             .disabled(library.busy || library.updatingPlayed.contains(episode.id))
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                Task { await library.toggleDownload(episode) }
+            } label: {
+                if downloaded { Image(systemName: "trash").accessibilityLabel("Remove Download") }
+                else if downloading { Image(systemName: "ellipsis.circle").accessibilityLabel("Downloading…") }
+                else { Image(systemName: "arrow.down.circle").accessibilityLabel("Download") }
+            }
+            .tint(downloaded ? .red : .blue)
+            .disabled(downloading || (!downloaded && episode.locked))
+
+            Button {
+                library.setSaved(!saved, for: episode)
+            } label: {
+                Image(systemName: saved ? "bookmark.slash" : "bookmark")
+            }
+            .accessibilityLabel(saved ? Text("Unsave") : Text("Save"))
+            .tint(.yellow)
         }
     }
 }
@@ -81,15 +103,23 @@ private struct EpisodeRow: View {
     let show: Show?
     let showsPodcastName: Bool
     let played: Bool
+    let saved: Bool
+    let downloaded: Bool
     let resumePosition: Double
     let isCurrent: Bool
+    let downloading: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             Cover(artwork: episode.artwork ?? show?.artwork, radius: 8).frame(width: 56)
             VStack(alignment: .leading, spacing: 4) {
                 if showsPodcastName, let show { Text(show.name).font(.caption).foregroundStyle(.secondary) }
-                Text(episode.name).font(.body.weight(.medium)).lineLimit(3)
+                HStack(spacing: 8) {
+                    Text(episode.name).font(.body.weight(.medium)).lineLimit(3)
+                    Spacer(minLength: 0)
+                    if downloading { ProgressView().accessibilityLabel("Downloading…") }
+                    if isCurrent { Image(systemName: "waveform").foregroundStyle(Color.accentColor) }
+                }
                 HStack(spacing: 5) {
                     if episode.locked { Image(systemName: "lock.fill").accessibilityLabel("Subscription required") }
                     if played { Image(systemName: "checkmark.circle.fill").accessibilityLabel("Played") }
@@ -99,10 +129,15 @@ private struct EpisodeRow: View {
                         if resumePosition > 0 { Text("· \(minutes) min left") }
                         else { Text("· \(minutes) min") }
                     }
+                    if saved || downloaded { Spacer(minLength: 0) }
+                    if saved { Image(systemName: "bookmark.fill").accessibilityLabel("Saved") }
+                    if downloaded {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .symbolRenderingMode(.monochrome)
+                            .accessibilityLabel("Downloaded")
+                    }
                 }.font(.caption).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
-            if isCurrent { Image(systemName: "waveform").foregroundStyle(Color.accentColor) }
         }
         .opacity(played ? 0.72 : 1)
         .contentShape(Rectangle())

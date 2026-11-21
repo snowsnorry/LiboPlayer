@@ -16,7 +16,7 @@ struct MiniPlayer: View {
 
     var body: some View {
         if let item = player.current {
-            let show = library.shows.first { $0.id == item.showID }
+            let show = library.show(for: item)
             HStack(spacing: inline ? 0 : 4) {
                 Button { player.expanded = true } label: {
                     HStack(spacing: 8) {
@@ -56,7 +56,7 @@ struct PlayerSheet: View {
     @State private var dragging: Double?
     var body: some View {
         if let item = player.current {
-            let show = library.shows.first { $0.id == item.showID }
+            let show = library.show(for: item)
             ViewThatFits(in: .vertical) {
                 contents(item, show, large: true)
                 ScrollView { contents(item, show, large: false) }

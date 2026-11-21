@@ -1,12 +1,12 @@
 import SwiftUI
 
 private enum LibraryTab: CaseIterable {
-    case shows, episodes, search
+    case allShows, library, search
     var title: LocalizedStringResource {
-        switch self { case .shows: "Shows"; case .episodes: "My Episodes"; case .search: "Search" }
+        switch self { case .allShows: "All Shows"; case .library: "Library"; case .search: "Search" }
     }
     var icon: String {
-        switch self { case .shows: "square.grid.2x2"; case .episodes: "rectangle.stack"; case .search: "magnifyingglass" }
+        switch self { case .allShows: "square.grid.2x2"; case .library: "rectangle.stack"; case .search: "magnifyingglass" }
     }
 }
 
@@ -14,8 +14,9 @@ struct LibraryScreen: View {
     @Environment(PodcastLibrary.self) private var library
     @Environment(PodcastPlayer.self) private var player
     @Environment(\.scenePhase) private var phase
-    @State private var tab = LibraryTab.shows
+    @State private var tab = LibraryTab.allShows
     @State private var path: [Show] = []
+    @State private var libraryPath = NavigationPath()
     @State private var login = false
     @State private var archiveError: String?
     @State private var archiveRetry = 0
@@ -30,7 +31,7 @@ struct LibraryScreen: View {
                 do {
                     if try StudioCredential.saved() == nil, await SignInPage.hasPreviousLoginStorage() {
                         login = true
-                    } else { await library.refresh() }
+                    } else { await library.refresh(quietIfCached: true) }
                 } catch { library.message = LibraryError.message(for: error) }
             }
             .task(id: ArchiveKey(session: ObjectIdentifier(library.session), shows: library.subscriptions.keys.sorted(), retry: archiveRetry)) {
@@ -38,7 +39,10 @@ struct LibraryScreen: View {
                 do { try await library.loadArchive() }
                 catch { if !Task.isCancelled { archiveError = LibraryError.message(for: error) } }
             }
-            .onChange(of: library.account) { _, id in player.useAccount(id) }
+            .onChange(of: library.account) { _, id in
+                libraryPath = NavigationPath()
+                player.useAccount(id)
+            }
             .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
             .sheet(isPresented: Binding(get: { player.expanded }, set: { player.expanded = $0 })) { PlayerSheet().presentationDragIndicator(.visible) }
             .fullScreenCover(isPresented: $login, onDismiss: {
@@ -81,8 +85,8 @@ struct LibraryScreen: View {
     @available(iOS 26.0, *)
     private var floatingTabs: some View {
         TabView(selection: $tab) {
-            Tab("Shows", systemImage: LibraryTab.shows.icon, value: LibraryTab.shows) { screen(for: .shows) }
-            Tab("My Episodes", systemImage: LibraryTab.episodes.icon, value: LibraryTab.episodes) { screen(for: .episodes) }
+            Tab("All Shows", systemImage: LibraryTab.allShows.icon, value: LibraryTab.allShows) { screen(for: .allShows) }
+            Tab("Library", systemImage: LibraryTab.library.icon, value: LibraryTab.library) { screen(for: .library) }
             Tab(value: LibraryTab.search, role: .search) { screen(for: .search) }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
@@ -90,30 +94,38 @@ struct LibraryScreen: View {
 
     @ViewBuilder private func screen(for item: LibraryTab) -> some View {
         switch item {
-        case .shows:
+        case .allShows:
             NavigationStack(path: $path) {
                 Group {
-                    if library.ready { showsGrid }
+                    if library.ready { allShowsGrid }
                     else { catalogLoading }
                 }
                 .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
                             prompt: "Search show titles")
-                .navigationTitle(Text(item.title))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { login = true } label: {
-                            Image(systemName: library.account == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
-                        }.accessibilityLabel(library.account == nil ? Text("Sign in with Telegram") : Text("Libo/Libo Account"))
-                    }
-                }
+                .leadingTitle(Text(item.title))
+                .toolbar { profileToolbarItem }
                 .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
-        case .episodes:
-            NavigationStack {
-                myEpisodes
-                    .navigationTitle(Text(item.title))
-                    .navigationBarTitleDisplayMode(.inline)
+        case .library:
+            NavigationStack(path: $libraryPath) {
+                LibraryHome()
+                    .leadingTitle(Text(item.title))
+                    .toolbar { profileToolbarItem }
+                    .navigationDestination(for: LibrarySection.self) { section in
+                        Group {
+                            switch section {
+                            case .shows: followedShowsGrid
+                            case .categories: CategoryList()
+                            case .saved, .downloaded: CollectionEpisodes(section: section)
+                            case .latestEpisodes: latestEpisodes
+                            }
+                        }.leadingTitle(Text(section.title))
+                    }
+                    .navigationDestination(for: StudioCategory.self) { category in
+                        ScrollView { ShowGrid(shows: library.followedShows(in: category)).padding(.horizontal, 18) }
+                            .leadingTitle(Text(verbatim: category.name))
+                    }
+                    .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
         case .search:
             NavigationStack {
@@ -121,9 +133,18 @@ struct LibraryScreen: View {
                     if library.ready { EpisodeSearchScreen(query: $catalogSearch) }
                     else { catalogLoading }
                 }
-                .navigationTitle(Text(item.title))
-                .navigationBarTitleDisplayMode(.inline)
+                .leadingTitle(Text(item.title))
+                .toolbar { profileToolbarItem }
             }
+        }
+    }
+
+    private var profileToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { login = true } label: {
+                Image(systemName: library.account == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
+            }
+            .accessibilityLabel(library.account == nil ? Text("Sign in with Telegram") : Text("Libo/Libo Account"))
         }
     }
 
@@ -132,21 +153,11 @@ struct LibraryScreen: View {
         else { Button("Load Shows") { Task { await library.refresh() } } }
     }
 
-    private var showsGrid: some View {
+    private var allShowsGrid: some View {
         let term = showSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         let shows = term.isEmpty ? library.shows : library.shows.filter { $0.name.localizedStandardContains(term) }
         return ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 145, maximum: 220), spacing: 16)], alignment: .leading, spacing: 22) {
-                ForEach(shows) { show in
-                    NavigationLink(value: show) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Cover(artwork: show.artwork, radius: 12)
-                            Text(show.name).font(.subheadline.weight(.semibold)).lineLimit(2)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }.buttonStyle(.plain)
-                }
-            }.padding(.horizontal, 18).padding(.bottom, 24)
+            ShowGrid(shows: shows).padding(.horizontal, 18).padding(.bottom, 24)
         }
         .overlay {
             if !term.isEmpty && shows.isEmpty { ContentUnavailableView.search(text: term) }
@@ -154,16 +165,31 @@ struct LibraryScreen: View {
         .refreshable { await library.refresh() }
     }
 
-    @ViewBuilder private var myEpisodes: some View {
+    @ViewBuilder private var followedShowsGrid: some View {
+        if !library.ready { catalogLoading }
+        else if library.account == nil {
+            ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
+                actions: { Button("Sign in with Telegram") { login = true } }
+        } else if library.followedShows.isEmpty {
+            ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
+                actions: { Button("Browse Shows") { path.removeAll(); tab = .allShows } }
+        } else {
+            ScrollView {
+                ShowGrid(shows: library.followedShows.sorted(by: Show.alphabetical)).padding(.horizontal, 18)
+            }.refreshable { await library.refresh() }
+        }
+    }
+
+    @ViewBuilder private var latestEpisodes: some View {
         if library.ready && library.account == nil {
-            ContentUnavailableView { Label("My Episodes", systemImage: "heart") }
+            ContentUnavailableView { Label("Latest Episodes", systemImage: "heart") }
                 description: { Text("Sign in to see episodes from the shows you follow.") }
                 actions: { Button("Sign in with Telegram") { login = true } }
         } else if library.ready && library.subscriptions.isEmpty {
             ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
                 actions: { Button("Browse Shows") {
                     path.removeAll()
-                    tab = .shows
+                    tab = .allShows
                 } }
         } else {
             ZStack {
@@ -177,7 +203,7 @@ struct LibraryScreen: View {
                 } else if library.feed.isEmpty {
                     ContentUnavailableView("No Episodes in Your Followed Shows", systemImage: "rectangle.stack")
                 } else {
-                    EpisodeList(episodes: library.feed, source: .library, query: $episodeQuery)
+                    EpisodeList(episodes: library.feed, source: .latestEpisodes, query: $episodeQuery)
                         .refreshable { await library.refresh() }
                 }
             }
@@ -210,8 +236,7 @@ private struct ShowScreen: View {
         }
         .searchable(text: $episodeQuery.title, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search episode titles")
-        .navigationTitle(show.name)
-        .navigationBarTitleDisplayMode(.inline)
+        .leadingTitle(Text(verbatim: show.name))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 let saved = library.subscriptions[show.id] != nil
