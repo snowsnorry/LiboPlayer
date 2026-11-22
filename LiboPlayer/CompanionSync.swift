@@ -92,6 +92,8 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         #if os(iOS)
         if let credential = try StudioCredential.saved(), credential.accountID == snapshot.account {
             context["credential"] = try encoder.encode(credential)
+        } else if snapshot.account == nil && StudioCredential.didSignOut {
+            context["signedOut"] = true
         }
         #endif
         // Application context is latest-state delivery. Large libraries use a queued file.
@@ -114,13 +116,15 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         do {
             #if os(watchOS)
             let credential = try (context["credential"] as? Data).map { try JSONDecoder().decode(StudioCredential.self, from: $0) }
+            let signedOut = context["signedOut"] as? Bool == true
             if let credential { try library.adoptPhoneCredential(credential) }
+            else if signedOut && library.isSignedIn { try library.signOut() }
             #endif
             if let bookmarks = context["bookmarks"] as? Data { try merge(bookmarks) }
             #if os(watchOS)
-            if fresh, requestID != nil, let credential {
+            if fresh, requestID != nil, credential != nil || signedOut {
                 requestID = nil
-                status = credential.signedIn && library.account != nil ? .complete : .signIn
+                status = credential?.signedIn == true && library.account != nil ? .complete : .signIn
             }
             #endif
         } catch { issue = String(localized: "Couldn’t sync your library. Try again.") }

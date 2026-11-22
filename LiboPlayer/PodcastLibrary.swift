@@ -4,7 +4,10 @@ import Observation
 @Observable @MainActor
 final class PodcastLibrary {
     private(set) var shows: [Show] = []
-    private(set) var account: String?
+    private var currentCredential: StudioCredential?
+    var account: String? { currentCredential?.accountID }
+    var isSignedIn: Bool { currentCredential?.signedIn == true }
+    var profile: StudioProfile? { currentCredential?.profile }
     private(set) var subscriptions: [String: String] = [:]
     private(set) var episodes: [String: [Episode]] = [:]
     private(set) var feed: [Episode] = []
@@ -25,8 +28,9 @@ final class PodcastLibrary {
     private(set) var categoryMembers: [String: Set<String>] = [:]
 
     init() {
-        let owner = (try? StudioCredential.saved())?.accountID
-        account = owner
+        let saved = try? StudioCredential.saved()
+        currentCredential = saved
+        let owner = saved?.accountID
         collection = EpisodeCollection(account: owner)
         serverPlayed = Self.cachedPlayed(for: owner)
         if let error = collection.loadError { message = error.localizedDescription }
@@ -141,10 +145,12 @@ final class PodcastLibrary {
 
     func refresh(quietIfCached: Bool = false) async {
         guard !busy, changing.isEmpty, updatingPlayed.isEmpty else { return }
+        let generation = identityGeneration
         do { _ = try await reloadCatalog() }
         catch {
+            guard generation == identityGeneration else { return }
             let hasOfflineContent = !collection.saved.isEmpty || !collection.downloaded.isEmpty
-            if !Task.isCancelled && !(quietIfCached && hasOfflineContent) { message = LibraryError.message(for: error) }
+            if !Task.isCancelled && !(quietIfCached && (ready || hasOfflineContent)) { message = LibraryError.message(for: error) }
         }
     }
 
@@ -156,8 +162,18 @@ final class PodcastLibrary {
 
     func useCredential(_ credential: StudioCredential) async throws {
         // A previous account's catalog must finish before the new identity can be installed.
-        while let catalogLoad { _ = await catalogLoad.result }
+        let generation = identityGeneration
+        while let catalogLoad {
+            _ = await catalogLoad.result
+            guard generation == identityGeneration else { throw CancellationError() }
+        }
         _ = try await reloadCatalog(using: credential)
+    }
+
+    func signOut() throws {
+        try StudioCredential.removeForSignOut()
+        resetIdentity(to: nil)
+        companionStateChanged?()
     }
 
     #if os(watchOS)
@@ -166,29 +182,40 @@ final class PodcastLibrary {
         let saved = try StudioCredential.saved()
         guard saved != credential, credential.signedIn || saved?.signedIn == true else { return }
         try credential.save()
+        resetIdentity(to: credential)
+    }
+    #endif
+
+    private func resetIdentity(to credential: StudioCredential?) {
         identityGeneration = UUID()
         catalogLoad?.cancel()
         catalogLoad = nil
         pending.values.forEach { $0.cancel() }
         pending.removeAll()
         session = StudioSession()
-        if account != credential.accountID {
-            account = credential.accountID
-            collection = EpisodeCollection(account: account)
+        if account != credential?.accountID {
+            collection = EpisodeCollection(account: credential?.accountID)
         }
-        shows = []
+        currentCredential = credential
+        message = nil
+        changing.removeAll()
+        updatingPlayed.removeAll()
         episodes.removeAll()
         feed = []
         subscriptions.removeAll()
-        categories = []
         categoryMembers.removeAll()
         serverPlayed = Self.cachedPlayed(for: account)
+        // On iPhone the shows and categories come from the public home page.
+        // Keep them visible while a guest session is being established.
+        #if os(watchOS)
+        shows = []
+        categories = []
         ready = false
         cachedArchives.removeAll()
         cachedCategories = false
         restoreWatchCatalog()
+        #endif
     }
-    #endif
 
     private func reloadCatalog(using selected: StudioCredential? = nil) async throws -> StudioSession {
         if let catalogLoad { return try await catalogLoad.value }
@@ -212,7 +239,7 @@ final class PodcastLibrary {
             }
             categories = catalog.categories
             categoryMembers = [:]
-            account = catalog.account
+            currentCredential = candidate.credential
             do { try collection.updateAccess(candidate.withCurrentAccess) }
             catch { message = error.localizedDescription }
             #if os(watchOS)
@@ -331,7 +358,8 @@ final class PodcastLibrary {
         guard source === session, var ids = serverPlayed else { throw CancellationError() }
         guard ids.contains(id) != played else { return }
         updatingPlayed.insert(id)
-        defer { updatingPlayed.remove(id) }
+        let generation = identityGeneration
+        defer { if generation == identityGeneration { updatingPlayed.remove(id) } }
         try await source.setPlayed(played, id: id)
         guard source === session else { throw CancellationError() }
         if played { ids.insert(id) } else { ids.remove(id) }
@@ -341,7 +369,8 @@ final class PodcastLibrary {
     func toggle(_ show: Show) async {
         guard account != nil, changing.isEmpty, !busy else { return }
         changing.insert(show.id)
-        defer { changing.remove(show.id) }
+        let generation = identityGeneration
+        defer { if generation == identityGeneration { changing.remove(show.id) } }
         let owner = account
         do {
             let source = try await sessionForRequest()
@@ -351,7 +380,9 @@ final class PodcastLibrary {
             guard source === session else { return }
             subscriptions = updated
             rebuildFeed()
-        } catch { message = String(localized: "Couldn’t update your followed shows. Refresh the catalog and try again.") }
+        } catch {
+            if generation == identityGeneration { message = String(localized: "Couldn’t update your followed shows. Refresh the catalog and try again.") }
+        }
     }
 
     private func rebuildFeed() {

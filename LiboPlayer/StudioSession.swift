@@ -106,7 +106,7 @@ final class StudioSession {
         }
     }
 
-    private func guest() async throws -> StudioCredential {
+    func guest() async throws -> StudioCredential {
         struct Guest: Decodable { let token: String }
         let data = try await request(["authPlayer"], method: "POST")
         let token = try JSONDecoder().decode(Guest.self, from: data).token
@@ -125,7 +125,8 @@ final class StudioSession {
         let account = StudioPayload.identifier(user["tgId"])
         if credential?.signedIn == true && account == nil { throw LibraryError.expired }
         if let current = credential, let account {
-            credential = StudioCredential(token: current.token, signedIn: true, accountID: account)
+            credential = StudioCredential(token: current.token, signedIn: true, accountID: account,
+                                          profile: StudioProfile(user: user))
         }
         let subscriptions = try await readSubscriptions()
         let page = try await request([])

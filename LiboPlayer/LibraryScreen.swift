@@ -18,6 +18,8 @@ struct LibraryScreen: View {
     @State private var path: [Show] = []
     @State private var libraryPath = NavigationPath()
     @State private var login = false
+    @State private var showingProfile = false
+    @State private var restoringPreviousLogin = false
     @State private var archiveError: String?
     @State private var archiveRetry = 0
     @State private var showSearch = ""
@@ -29,7 +31,8 @@ struct LibraryScreen: View {
             .task {
                 guard !library.ready else { return }
                 do {
-                    if try StudioCredential.saved() == nil, await SignInPage.hasPreviousLoginStorage() {
+                    if try StudioCredential.saved() == nil, !StudioCredential.didSignOut, await SignInPage.hasPreviousLoginStorage() {
+                        restoringPreviousLogin = true
                         login = true
                     } else { await library.refresh(quietIfCached: true) }
                 } catch { library.message = LibraryError.message(for: error) }
@@ -48,9 +51,11 @@ struct LibraryScreen: View {
             }
             .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
             .sheet(isPresented: Binding(get: { player.expanded }, set: { player.expanded = $0 })) { PlayerSheet().presentationDragIndicator(.visible) }
-            .fullScreenCover(isPresented: $login, onDismiss: {
+            .sheet(isPresented: $showingProfile) { AccountProfileScreen() }
+            .sheet(isPresented: $login, onDismiss: {
+                restoringPreviousLogin = false
                 if !library.ready { Task { await library.refresh() } }
-            }) { SignInPage() }
+            }) { SignInPage(restoringPreviousLogin: restoringPreviousLogin) }
             .alert("Libo/Libo", isPresented: Binding(get: { library.message != nil || player.message != nil },
                    set: { if !$0 { library.message = nil; player.message = nil } })) {
                 Button("Close", role: .cancel) {}
@@ -147,10 +152,13 @@ struct LibraryScreen: View {
 
     private var profileToolbarItem: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button { login = true } label: {
-                Image(systemName: library.account == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
+            Button {
+                if library.isSignedIn { showingProfile = true }
+                else { login = true }
+            } label: {
+                Image(systemName: library.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle.badge.plus")
             }
-            .accessibilityLabel(library.account == nil ? Text("Sign in with Telegram") : Text("Libo/Libo Account"))
+            .accessibilityLabel(library.isSignedIn ? Text("Libo/Libo Account") : Text("Sign in with Telegram"))
         }
     }
 

@@ -4,55 +4,56 @@ import WebKit
 struct SignInPage: View {
     @Environment(PodcastLibrary.self) private var library
     @Environment(\.dismiss) private var dismiss
-    @State private var controller = LoginController()
+    let restoringPreviousLogin: Bool
+    @State private var attempt = 0
+    @State private var showingTelegram = false
     @State private var saving = false
+    @State private var cancelled = false
+    @State private var pendingCredential: StudioCredential?
     @State private var errorMessage: String?
-    @State private var guestToConfirm: StudioCredential?
 
     var body: some View {
-        NavigationStack {
-            LoginView(controller: controller)
-                .ignoresSafeArea(edges: .bottom)
-                .leadingTitle(Text("Libo/Libo Account"))
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }.disabled(saving)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        if saving { ProgressView() }
-                        else { Button("Done") { Task { await finish() } } }
-                    }
+        AccountPanel(expanded: showingTelegram, closeDisabled: saving, close: { cancelled = true; dismiss() }) {
+            if !showingTelegram {
+                Text("Sign in to see the shows you follow.")
+                    .foregroundStyle(.secondary)
+            }
+            LoginView(restorePrevious: restoringPreviousLogin && attempt == 0,
+                      popupChanged: { showingTelegram = $0 }) { result in
+                guard !cancelled, !saving, errorMessage == nil else { return }
+                switch result {
+                case .success(let credential): finish(using: credential)
+                case .failure(let error): errorMessage = LibraryError.message(for: error)
                 }
+            }
+            .id(attempt)
+            .disabled(saving)
+            .overlay { if saving { ProgressView() } }
         }
         .interactiveDismissDisabled(saving)
         .alert("Libo/Libo", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("Close", role: .cancel) {}
+            Button("Try Again") {
+                if let pendingCredential { finish(using: pendingCredential) }
+                else { showingTelegram = false; attempt += 1 }
+            }
+            Button("Cancel", role: .cancel) { cancelled = true; dismiss() }
         } message: { Text(errorMessage ?? "") }
-        .confirmationDialog("Continue as a guest?", isPresented: Binding(
-            get: { guestToConfirm != nil }, set: { if !$0 { guestToConfirm = nil } }
-        ), presenting: guestToConfirm) { guest in
-            Button("Continue as a guest") { Task { await finish(confirmedGuest: guest) } }
-            Button("Cancel", role: .cancel) {}
-        }
     }
 
-    private func finish(confirmedGuest: StudioCredential? = nil) async {
-        guard !saving else { return }
+    private func finish(using credential: StudioCredential) {
+        guard !saving, !cancelled else { return }
         saving = true
-        defer { saving = false }
-        do {
-            let credential: StudioCredential
-            if let confirmedGuest { credential = confirmedGuest }
-            else {
-                credential = try await controller.credential()
-                if !credential.signedIn, try StudioCredential.saved()?.signedIn == true {
-                    guestToConfirm = credential
-                    return
-                }
+        pendingCredential = credential
+        Task {
+            defer { saving = false }
+            do {
+                try await library.useCredential(credential)
+                dismiss()
+            } catch {
+                if error as? LibraryError == .expired { pendingCredential = nil }
+                errorMessage = LibraryError.message(for: error)
             }
-            try await library.useCredential(credential)
-            dismiss()
-        } catch { errorMessage = LibraryError.message(for: error) }
+        }
     }
 
     static func hasPreviousLoginStorage() async -> Bool {
@@ -62,33 +63,146 @@ struct SignInPage: View {
 }
 
 private struct LoginView: UIViewControllerRepresentable {
-    let controller: LoginController
-    func makeUIViewController(context: Context) -> LoginController { controller }
-    func updateUIViewController(_ uiViewController: LoginController, context: Context) {}
+    let restorePrevious: Bool
+    let popupChanged: (Bool) -> Void
+    let onResult: (Result<StudioCredential, Error>) -> Void
+
+    func makeUIViewController(context: Context) -> LoginController {
+        let controller = LoginController()
+        controller.popupChanged = popupChanged
+        controller.restorePrevious = restorePrevious
+        controller.onResult = onResult
+        return controller
+    }
+    func updateUIViewController(_ controller: LoginController, context: Context) {}
+    static func dismantleUIViewController(_ controller: LoginController, coordinator: ()) {
+        controller.stop()
+    }
 }
 
 @MainActor
-final class LoginController: UIViewController, WKUIDelegate, WKNavigationDelegate {
+private final class LoginController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+    fileprivate var popupChanged: ((Bool) -> Void)?
+    fileprivate var restorePrevious = false
+    fileprivate var onResult: ((Result<StudioCredential, Error>) -> Void)?
     private var windows: [WKWebView] = []
+    private let spinner = UIActivityIndicatorView(style: .medium)
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let main = attach(configuration: WKWebViewConfiguration())
-        main.load(URLRequest(url: StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "profile")])))
+        view.backgroundColor = .clear
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = restorePrevious ? .default() : .nonPersistent()
+        configuration.userContentController.add(self, name: "studioLogin")
+        let main = attach(configuration: configuration)
+        main.isHidden = true
+        main.isOpaque = false
+        main.backgroundColor = .clear
+        spinner.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        spinner.autoresizingMask = [.flexibleLeftMargin, .flexibleRightMargin, .flexibleTopMargin, .flexibleBottomMargin]
+        view.addSubview(spinner)
+        spinner.startAnimating()
+        var request = URLRequest(url: StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "profile")]))
+        request.timeoutInterval = 30
+        main.load(request)
     }
 
-    func credential() async throws -> StudioCredential {
-        guard let web = windows.first, windows.count == 1, StudioSite.isPlayer(web.url) else { throw LibraryError.expired }
-        // Only the visible studio account page can hand off its own session after Done.
-        let result = try await web.evaluateJavaScript("""
-            (() => {
-                if (location.origin !== 'https://play.libolibo.me' || typeof window.pageData?.feeds !== 'function') return null;
-                return {token: localStorage.liboToken, signedIn: localStorage.webAuthed === 'true' || !!localStorage.mailAuth};
-            })()
-            """)
-        guard let values = result as? [String: Any], let token = values["token"] as? String, !token.isEmpty,
-              let signedIn = values["signedIn"] as? Bool else { throw LibraryError.unavailable }
-        return StudioCredential(token: token, signedIn: signedIn)
+    func stop() {
+        onResult = nil
+        popupChanged = nil
+        windows.first?.configuration.userContentController.removeScriptMessageHandler(forName: "studioLogin")
+        for web in windows {
+            web.navigationDelegate = nil
+            web.uiDelegate = nil
+            web.stopLoading()
+        }
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        guard webView === windows.first else { return }
+        webView.isHidden = true
+        spinner.startAnimating()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard webView === windows.first, StudioSite.isPlayer(webView.url) else { return }
+        let restore = restorePrevious
+        restorePrevious = false
+        webView.callAsyncJavaScript(Self.prepareWidget, arguments: ["restore": restore], in: nil, in: .page) { [weak self] result in
+            guard let self, self.onResult != nil else { return }
+            self.spinner.stopAnimating()
+            switch result {
+            case .success(let value):
+                if let token = value as? String, !token.isEmpty {
+                    self.onResult?(.success(StudioCredential(token: token, signedIn: true)))
+                } else { webView.isHidden = webView !== self.windows.last }
+            case .failure(let error): self.onResult?(.failure(error))
+            }
+        }
+    }
+
+    // Use the studio's own widget and exchange. An existing guest or member token in
+    // localStorage is not evidence that a new sign-in succeeded.
+    private static let prepareWidget = """
+        if (location.origin !== 'https://play.libolibo.me') throw Error('Unexpected origin');
+        if (restore && (localStorage.webAuthed === 'true' || localStorage.mailAuth) && localStorage.liboToken)
+            return localStorage.liboToken;
+
+        const bridge = window.webkit.messageHandlers.studioLogin;
+        const isExchange = config => config?.method?.toLowerCase() === 'post'
+            && new URL(config.url, location.href).href === location.origin + '/webAuth';
+        axios.interceptors.response.use(response => {
+            if (isExchange(response.config)) bridge.postMessage(response.data?.token || '');
+            return response;
+        }, error => {
+            if (isExchange(error.config)) bridge.postMessage('');
+            return Promise.reject(error);
+        });
+
+        const box = document.createElement('div');
+        box.id = 'libo-player-login';
+        const style = document.createElement('style');
+        style.textContent = `
+            html, body { background: transparent !important; overflow: hidden !important; }
+            body > :not(#libo-player-login) { display: none !important; }
+            #libo-player-login iframe { border-radius: 10px; }
+            #libo-player-login { position: fixed; inset: 0; display: grid; place-items: center; }
+        `;
+        document.head.append(style);
+        document.body.append(box);
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(Error('Widget unavailable')), 15000);
+            box.addEventListener('load', event => {
+                const frame = event.target;
+                if (frame instanceof HTMLIFrameElement && new URL(frame.src).origin === 'https://oauth.telegram.org') {
+                    clearTimeout(timer);
+                    resolve();
+                }
+            }, true);
+            window.renderTelegramWidget(box.id, 'onTgWebAuth');
+        });
+        return null;
+        """
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        let origin = message.frameInfo.securityOrigin
+        guard message.webView === windows.first, message.frameInfo.isMainFrame,
+              origin.protocol == "https", origin.host == StudioSite.home.host, [0, 443].contains(origin.port),
+              StudioSite.isPlayer(message.webView?.url), let token = message.body as? String else { return }
+        if token.isEmpty { onResult?(.failure(LibraryError.unavailable)) }
+        else { onResult?(.success(StudioCredential(token: token, signedIn: true))) }
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if (error as NSError).code != NSURLErrorCancelled { onResult?(.failure(error)) }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if (error as NSError).code != NSURLErrorCancelled { onResult?(.failure(error)) }
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        onResult?(.failure(LibraryError.unavailable))
     }
 
     private func attach(configuration: WKWebViewConfiguration) -> WKWebView {
@@ -104,13 +218,18 @@ final class LoginController: UIViewController, WKUIDelegate, WKNavigationDelegat
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         // WebKit supplies the configuration that connects the Telegram popup to its opener.
-        attach(configuration: configuration)
+        windows.last?.isHidden = true
+        let popup = attach(configuration: configuration)
+        popupChanged?(true)
+        return popup
     }
 
     func webViewDidClose(_ webView: WKWebView) {
         guard windows.first !== webView else { return }
         windows.removeAll { $0 === webView }
         webView.removeFromSuperview()
+        windows.last?.isHidden = false
+        popupChanged?(windows.count > 1)
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,

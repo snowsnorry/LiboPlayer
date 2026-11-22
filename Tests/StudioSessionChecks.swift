@@ -35,7 +35,7 @@ private final class FixtureAPI: URLProtocol {
                 return
             case "Bearer member-fixture":
                 precondition(request.value(forHTTPHeaderField: "webAuthed") == "true")
-                body = #"{"user":{"tgId":123,"paid":true,"guide":false,"played":{"a":\#(Self.played),"b":false}}}"#
+                body = #"{"user":{"tgId":123,"first_name":" Анна ","last_name":"Ли","username":"@annali","paid":true,"guide":false,"played":{"a":\#(Self.played),"b":false}}}"#
             case "Bearer guest-fixture":
                 precondition(request.value(forHTTPHeaderField: "webAuthed") == nil)
                 body = #"{"user":{"paid":false,"guide":false}}"#
@@ -85,6 +85,11 @@ struct StudioSessionChecks {
         precondition(catalog.account == "123" && catalog.played == ["a"] && catalog.subscriptions["show"] == "sub")
         let show = catalog.shows[0]
         precondition(session.credential?.accountID == "123")
+        precondition(session.credential?.profile?.name == "Анна Ли")
+        precondition(session.credential?.profile?.username == "annali")
+        let legacy = try JSONDecoder().decode(StudioCredential.self, from:
+            Data(#"{"token":"old","signedIn":true,"accountID":"123"}"#.utf8))
+        precondition(legacy.profile == nil && legacy.signedIn)
         let recent = Show.recentlyUpdated(catalog.shows, archives: [:])
         precondition(recent.map(\.id) == ["show"] && recent.first?.lastEpisode == 210)
         precondition(catalog.categories.map(\.name) == ["Technology"])
@@ -125,6 +130,7 @@ struct StudioSessionChecks {
         } catch let error as URLError { precondition(error.code == .timedOut) }
         let guest = try await session.catalog(using: StudioCredential(token: "expired-fixture", signedIn: false))
         precondition(guest.account == nil && session.credential?.token == "guest-fixture")
+        precondition(session.credential?.profile == nil)
         let guestRows = try await session.episodes(for: show)
         precondition(guestRows[0].locked && guestRows[0].streamURL == nil)
         print("Native catalog, categories, episodes, search, playback marks and credential expiry checks passed.")
