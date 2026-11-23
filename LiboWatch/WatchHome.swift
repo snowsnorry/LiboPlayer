@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum WatchRoute: Hashable {
-    case allShows, library, search, shows, categories, category(StudioCategory), show(Show)
+    case allShows, library, search, following, show(Show)
     case saved, downloaded, latest, account
     case actions(Episode)
 }
@@ -49,19 +49,14 @@ struct WatchHome: View {
 
     @ViewBuilder private func destination(_ route: WatchRoute) -> some View {
         switch route {
-        case .allShows, .shows, .categories, .category, .latest, .show:
+        case .allShows, .following, .latest, .show:
             WatchCatalog(route: route)
         case .library:
             List {
-                link("Shows", "square.stack", .shows)
-                link("Categories", "square.3.layers.3d", .categories)
+                link("Following", "heart", .following)
                 link("Saved", "bookmark", .saved)
                 link("Downloaded", "arrow.down.circle", .downloaded)
                 link("Latest Episodes", "clock", .latest)
-                let recent = Show.recentlyUpdated(library.followedShows, archives: library.episodes)
-                if !recent.isEmpty {
-                    Section("Recently Updated") { ForEach(recent) { WatchShowRow(show: $0, showDate: true) } }
-                }
             }.navigationTitle("Library")
         case .saved:
             List { WatchEpisodeRows(episodes: library.collection.saved, source: .saved) }
@@ -189,17 +184,11 @@ struct WatchArt: View {
 
 struct WatchShowRow: View {
     let show: Show
-    var showDate = false
     var body: some View {
         NavigationLink(value: WatchRoute.show(show)) {
             HStack {
                 WatchArt(address: show.artwork, size: 34)
-                VStack(alignment: .leading) {
-                    Text(show.name).lineLimit(2)
-                    if showDate, let date = show.lastEpisode {
-                        Text(Date(timeIntervalSince1970: date), style: .relative).font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
+                Text(show.name).lineLimit(2)
             }
         }.accessibilityIdentifier("watch-show")
     }

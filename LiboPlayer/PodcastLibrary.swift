@@ -24,8 +24,6 @@ final class PodcastLibrary {
     @ObservationIgnored private var pending: [String: Task<[Episode], Error>] = [:]
 
     private(set) var collection: EpisodeCollection
-    private(set) var categories: [StudioCategory] = []
-    private(set) var categoryMembers: [String: Set<String>] = [:]
 
     init() {
         let saved = try? StudioCredential.saved()
@@ -40,14 +38,8 @@ final class PodcastLibrary {
     }
 
     var followedShows: [Show] { shows.filter { subscriptions[$0.id] != nil } }
-    func followedShows(in category: StudioCategory) -> [Show] {
-        guard let members = categoryMembers[category.id] else { return [] }
-        return followedShows.filter { members.contains($0.id) }.sorted(by: Show.alphabetical)
-    }
-
     #if os(watchOS)
     private var cachedArchives = Set<String>()
-    private var cachedCategories = false
     private var watchCache: WatchCatalogCache { WatchCatalogCache(account: account) }
 
     // Never treat cached metadata as a validated studio session or a credential.
@@ -56,7 +48,6 @@ final class PodcastLibrary {
         guard let cached = watchCache.read(Catalog.self, key: "catalog"), cached.account == account else { return false }
         if !ready {
             shows = cached.shows
-            categories = cached.categories
             subscriptions = cached.subscriptions
             if serverPlayed == nil { serverPlayed = Set(cached.played) }
         }
@@ -76,29 +67,7 @@ final class PodcastLibrary {
         return shows.isEmpty || shows.contains { episodes[$0.id] != nil }
     }
 
-    func restoreWatchCategories() -> Bool {
-        guard let members = watchCache.read([String: Set<String>].self, key: "categoryMembers") else { return false }
-        categoryMembers = members
-        cachedCategories = true
-        return true
-    }
     #endif
-
-    func loadCategories() async throws {
-        let source = try await sessionForRequest()
-        #if os(watchOS)
-        if cachedCategories { categoryMembers = [:]; cachedCategories = false }
-        #endif
-        for category in categories where categoryMembers[category.id] == nil {
-            try Task.checkCancellation()
-            let members = try await source.categoryShows(category)
-            guard source === session else { throw CancellationError() }
-            categoryMembers[category.id] = members
-        }
-        #if os(watchOS)
-        watchCache.store(categoryMembers, key: "categoryMembers")
-        #endif
-    }
 
     func show(for episode: Episode) -> Show? {
         shows.first { $0.id == episode.showID } ?? collection.cachedShow(episode.showID)
@@ -203,16 +172,13 @@ final class PodcastLibrary {
         episodes.removeAll()
         feed = []
         subscriptions.removeAll()
-        categoryMembers.removeAll()
         serverPlayed = Self.cachedPlayed(for: account)
-        // On iPhone the shows and categories come from the public home page.
+        // On iPhone the shows come from the public home page.
         // Keep them visible while a guest session is being established.
         #if os(watchOS)
         shows = []
-        categories = []
         ready = false
         cachedArchives.removeAll()
-        cachedCategories = false
         restoreWatchCatalog()
         #endif
     }
@@ -237,14 +203,11 @@ final class PodcastLibrary {
                 collection = EpisodeCollection(account: catalog.account)
                 serverPlayed = Self.cachedPlayed(for: catalog.account)
             }
-            categories = catalog.categories
-            categoryMembers = [:]
             currentCredential = candidate.credential
             do { try collection.updateAccess(candidate.withCurrentAccess) }
             catch { message = error.localizedDescription }
             #if os(watchOS)
             cachedArchives.removeAll()
-            cachedCategories = false
             watchCache.store(catalog, key: "catalog")
             #endif
             subscriptions = catalog.subscriptions

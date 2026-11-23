@@ -11,10 +11,8 @@ struct WatchCatalog: View {
     private var title: String {
         switch route {
         case .allShows: String(localized: "All Shows")
-        case .shows: String(localized: "Shows")
+        case .following: String(localized: "Following")
         case .latest: String(localized: "Latest Episodes")
-        case .categories: String(localized: "Categories")
-        case .category(let category): category.name
         case .show: ""
         default: ""
         }
@@ -67,7 +65,6 @@ struct WatchCatalog: View {
                 switch route {
                 case .latest: try await library.loadArchive()
                 case .show(let show): try await library.load(show)
-                case .categories, .category: try await library.loadCategories()
                 default: break
                 }
                 try Task.checkCancellation()
@@ -78,7 +75,6 @@ struct WatchCatalog: View {
                     switch route {
                     case .show(let show): showingCache = library.restoreWatchArchives([show])
                     case .latest: showingCache = library.restoreWatchArchives(library.followedShows)
-                    case .categories, .category: showingCache = library.restoreWatchCategories()
                     default: showingCache = true
                     }
                 }
@@ -92,19 +88,9 @@ struct WatchCatalog: View {
         switch route {
         case .allShows:
             ForEach(library.shows) { WatchShowRow(show: $0) }
-        case .shows:
+        case .following:
             if library.followedShows.isEmpty { emptySubscriptions }
             else { ForEach(library.followedShows.sorted(by: Show.alphabetical)) { WatchShowRow(show: $0) } }
-        case .categories:
-            let populated = library.categories.filter { !library.followedShows(in: $0).isEmpty }
-            if populated.isEmpty { Text("No Categories in Your Followed Shows") }
-            ForEach(populated) { category in
-                NavigationLink(value: WatchRoute.category(category)) {
-                    LabeledContent(category.name) { Text(library.followedShows(in: category).count, format: .number) }
-                }
-            }
-        case .category(let category):
-            ForEach(library.followedShows(in: category)) { WatchShowRow(show: $0) }
         case .latest:
             if library.subscriptions.isEmpty { emptySubscriptions }
             else if library.feed.isEmpty { Text("No Episodes in Your Followed Shows") }

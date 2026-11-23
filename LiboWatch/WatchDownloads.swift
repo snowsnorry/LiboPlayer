@@ -6,10 +6,23 @@ import SwiftUI
 /// User requests survive suspension and relaunch, independently of the paired phone.
 @MainActor @Observable
 final class WatchDownloads {
+    // The raw values also decode failures saved by earlier releases.
+    enum Failure: String, Codable {
+        case storageFull = "Watch storage full"
+        case downloadFailed = "Download failed"
+
+        var label: LocalizedStringKey {
+            switch self {
+            case .storageFull: "Watch storage full"
+            case .downloadFailed: "Download failed"
+            }
+        }
+    }
+
     struct Request: Codable, Identifiable {
         let episode: Episode
         let show: Show?
-        var failure: String?
+        var failure: Failure?
         var waitingForNetwork: Bool?
         var ready: Bool { failure == nil && waitingForNetwork != true }
         var id: String { episode.id }
@@ -107,9 +120,9 @@ final class WatchDownloads {
                     if let network = error as? URLError, [.notConnectedToInternet, .networkConnectionLost].contains(network.code) {
                         requests[index].waitingForNetwork = true
                     } else if failure.domain == NSCocoaErrorDomain && failure.code == NSFileWriteOutOfSpaceError {
-                        requests[index].failure = String(localized: "Watch storage full")
+                        requests[index].failure = .storageFull
                     } else {
-                        requests[index].failure = String(localized: "Download failed")
+                        requests[index].failure = .downloadFailed
                     }
                 }
             }

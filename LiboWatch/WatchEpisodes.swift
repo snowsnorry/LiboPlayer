@@ -45,8 +45,8 @@ struct WatchEpisodeRow: View {
                     Text(episode.name).episodeTitle().lineLimit(2)
                     HStack(spacing: 4) {
                         status
-                        if library.collection.isSaved(episode.id) { Image(systemName: "bookmark.fill").accessibilityLabel("Saved") }
-                        if player.isFinished(episode) { Image(systemName: "checkmark").accessibilityLabel("Played") }
+                        if library.collection.isSaved(episode.id) { Image(systemName: "bookmark.fill").accessibilityLabel(Text(LocalizedStringResource("episode.status.saved", defaultValue: "Saved"))) }
+                        if player.isFinished(episode) { Image(systemName: "checkmark").accessibilityLabel(Text(LocalizedStringResource("episode.status.played", defaultValue: "Played"))) }
                     }.font(.caption2).foregroundStyle(.secondary)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -63,7 +63,7 @@ struct WatchEpisodeRow: View {
         else if source == .downloaded, library.collection.localURL(episode.id) != nil {
             Label("On Watch", systemImage: "checkmark.circle.fill").foregroundStyle(.purple)
         } else if let request = downloads.requests.first(where: { $0.id == episode.id }) {
-            if let failure = request.failure { Text(failure) }
+            if let failure = request.failure { Text(failure.label) }
             else if request.waitingForNetwork == true { Text("Waiting for network") }
             else if let fraction = library.collection.downloadsInProgress[episode.id]?.fractionCompleted {
                 Text(fraction, format: .percent.precision(.fractionLength(0)))
@@ -74,7 +74,7 @@ struct WatchEpisodeRow: View {
             if episode.duration > 0 {
                 Text(Duration.seconds(max(0, episode.duration - after)), format: .units(allowed: [.hours, .minutes], width: .narrow))
             }
-            if library.collection.localURL(episode.id) != nil { Image(systemName: "arrow.down.circle.fill").accessibilityLabel("Downloaded") }
+            if library.collection.localURL(episode.id) != nil { Image(systemName: "arrow.down.circle.fill").accessibilityLabel(Text(LocalizedStringResource("episode.status.downloaded", defaultValue: "Downloaded"))) }
         }
     }
 }
@@ -90,11 +90,13 @@ struct WatchEpisodeActions: View {
     var body: some View {
         List {
             let played = player.isFinished(episode)
-            Button(played ? "Mark as Unplayed" : "Mark as Played", systemImage: played ? "arrow.counterclockwise" : "checkmark.circle") {
+            let playedAction: LocalizedStringKey = played ? "Mark as Unplayed" : "Mark as Played"
+            Button(playedAction, systemImage: played ? "arrow.counterclockwise" : "checkmark.circle") {
                 Task { await player.mark(episode, played: !played); dismiss() }
             }
             let saved = library.collection.isSaved(episode.id)
-            Button(saved ? "Unsave" : "Save", systemImage: saved ? "bookmark.slash" : "bookmark") {
+            let saveAction: LocalizedStringKey = saved ? "Unsave" : "Save"
+            Button(saveAction, systemImage: saved ? "bookmark.slash" : "bookmark") {
                 library.setSaved(!saved, for: episode); dismiss()
             }
             if library.collection.localURL(episode.id) != nil {

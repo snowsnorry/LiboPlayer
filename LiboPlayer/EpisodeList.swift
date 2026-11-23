@@ -88,10 +88,10 @@ struct EpisodeListRow: View {
                         .foregroundStyle(played ? .secondary : .primary)
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
-                        if saved { Image(systemName: "bookmark.fill").accessibilityLabel("Saved") }
+                        if saved { Image(systemName: "bookmark.fill").accessibilityLabel(Text(LocalizedStringResource("episode.status.saved", defaultValue: "Saved"))) }
                         if let download { EpisodeDownloadRing(download: download) }
                         else if downloaded {
-                            Image(systemName: "arrow.down.circle.fill").accessibilityLabel("Downloaded")
+                            Image(systemName: "arrow.down.circle.fill").accessibilityLabel(Text(LocalizedStringResource("episode.status.downloaded", defaultValue: "Downloaded")))
                         }
                     }
                     .font(.caption)
@@ -171,7 +171,7 @@ struct EpisodeListRow: View {
 
     private func metadata(_ show: Show?, played: Bool) -> some View {
         HStack(spacing: 5) {
-            if played { Image(systemName: "checkmark").accessibilityLabel("Played") }
+            if played { Image(systemName: "checkmark").accessibilityLabel(Text(LocalizedStringResource("episode.status.played", defaultValue: "Played"))) }
             if episode.published > 0 {
                 Text(Date(timeIntervalSince1970: episode.published), format: .dateTime.day().month().year())
                     .layoutPriority(1)
