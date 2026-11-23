@@ -27,25 +27,33 @@ struct EpisodeList: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Picker("Listening status", selection: $query.filter) {
-                        ForEach(EpisodeQuery.Filter.allCases, id: \.self) { filter in
-                            Text(filter.title).tag(filter)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    let active = query.filter != .all
-                    Label("Filter episodes", systemImage: active
-                          ? "line.3.horizontal.decrease.circle.fill"
-                          : "line.3.horizontal.decrease.circle")
-                        .labelStyle(.iconOnly)
-                        .environment(\.symbolVariants, .none)
-                        .foregroundStyle(active ? Color.accentColor : .primary)
-                }
-                .accessibilityValue(Text(query.filter.title))
+                EpisodeFilterMenu(filter: $query.filter)
             }
         }
+    }
+}
+
+struct EpisodeFilterMenu: View {
+    @Binding var filter: EpisodeQuery.Filter
+
+    var body: some View {
+        Menu {
+            Picker("Listening status", selection: $filter) {
+                ForEach(EpisodeQuery.Filter.allCases, id: \.self) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            let active = filter != .all
+            Label("Filter episodes", systemImage: active
+                  ? "line.3.horizontal.decrease.circle.fill"
+                  : "line.3.horizontal.decrease.circle")
+                .labelStyle(.iconOnly)
+                .environment(\.symbolVariants, .none)
+                .foregroundStyle(active ? Color.accentColor : .primary)
+        }
+        .accessibilityValue(Text(filter.title))
     }
 }
 

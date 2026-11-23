@@ -25,7 +25,6 @@ struct LibraryScreen: View {
     @State private var archiveRetry = 0
     @State private var showSearch = ""
     @State private var catalogSearch = ""
-    @State private var episodeQuery = EpisodeQuery()
 
     var body: some View {
         tabsWithPlayer
@@ -117,24 +116,17 @@ struct LibraryScreen: View {
             }
         case .library:
             NavigationStack(path: $libraryPath) {
-                LibraryHome(signIn: { login = true }) { libraryPath.append($0) }
+                LibraryHome(archiveError: archiveError, retryArchive: { archiveRetry += 1 },
+                            signIn: { login = true }, browseShows: browseShows) { libraryPath.append($0) }
                     .leadingTitle(Text(item.title))
                     .toolbar { profileToolbarItem }
                     .navigationDestination(for: LibrarySection.self) { section in
                         Group {
                             switch section {
-                            case .shows: followedShowsGrid
-                            case .categories: CategoryList()
+                            case .following: followedShowsGrid
                             case .saved, .downloaded: CollectionEpisodes(section: section) { libraryPath.append($0) }
-                            case .latestEpisodes: latestEpisodes
                             }
                         }.leadingTitle(Text(section.title))
-                    }
-                    .navigationDestination(for: StudioCategory.self) { category in
-                        ScrollView {
-                            ShowGrid(shows: library.followedShows(in: category), signIn: { login = true }) { libraryPath.append($0) }
-                        }
-                        .leadingTitle(Text(verbatim: category.name))
                     }
                     .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
@@ -188,7 +180,7 @@ struct LibraryScreen: View {
                 actions: { Button("Sign in with Telegram") { login = true } }
         } else if library.followedShows.isEmpty {
             ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
-                actions: { Button("Browse Shows") { path.removeAll(); tab = .allShows } }
+                actions: { Button("Browse Shows", action: browseShows) }
         } else {
             ScrollView {
                 ShowGrid(shows: library.followedShows.sorted(by: Show.alphabetical), signIn: { login = true }) { libraryPath.append($0) }
@@ -196,36 +188,9 @@ struct LibraryScreen: View {
         }
     }
 
-    @ViewBuilder private var latestEpisodes: some View {
-        if library.ready && library.account == nil {
-            ContentUnavailableView { Label("Latest Episodes", systemImage: "heart") }
-                description: { Text("Sign in to see episodes from the shows you follow.") }
-                actions: { Button("Sign in with Telegram") { login = true } }
-        } else if library.ready && library.subscriptions.isEmpty {
-            ContentUnavailableView { Label("No Followed Shows", systemImage: "heart") }
-                actions: { Button("Browse Shows") {
-                    path.removeAll()
-                    tab = .allShows
-                } }
-        } else {
-            ZStack {
-                if !library.ready { catalogLoading }
-                else if let archiveError {
-                    ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "exclamationmark.circle") }
-                        description: { Text(archiveError) }
-                        actions: { Button("Try Again") { archiveRetry += 1 } }
-                } else if !library.archiveReady {
-                    ProgressView("Loading episodes…")
-                } else if library.feed.isEmpty {
-                    ContentUnavailableView("No Episodes in Your Followed Shows", systemImage: "rectangle.stack")
-                } else {
-                    EpisodeList(episodes: library.feed, source: .latestEpisodes, query: $episodeQuery) { libraryPath.append($0) }
-                        .refreshable { await library.refresh() }
-                }
-            }
-            .searchable(text: $episodeQuery.title, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Search episode titles")
-        }
+    private func browseShows() {
+        path.removeAll()
+        tab = .allShows
     }
 
     private struct ArchiveKey: Equatable { let session: ObjectIdentifier; let shows: [String]; let retry: Int }

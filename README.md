@@ -4,7 +4,7 @@ Libo Player is a native iPhone app for listening to [Libo/Libo podcasts](https:/
 
 ## Library
 
-Library contains followed Shows, Categories, Saved, Downloaded and Latest Episodes. Recently Updated opens the same show pages as the catalog. In an episode list, swipe right to change its played status, or swipe left to save or download it. Either action can be undone independently.
+On iPhone, Library opens with Following, Saved and Downloaded. Below them, Latest Episodes lists releases from followed shows, newest first. You can search by episode title, filter by listening status or start playback directly in the feed. In an episode list, swipe right to change its played status, or swipe left to save or download it. Either action can be undone independently.
 
 Downloaded audio plays offline after restarting the app. Guest collections and each signed-in account have separate storage. Saved bookmarks can be changed offline and sync with the paired Apple Watch when available. Each device keeps its own downloads.
 
