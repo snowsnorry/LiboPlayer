@@ -2,13 +2,13 @@ import SwiftUI
 import UIKit
 
 extension View {
-    func leadingTitle(_ title: Text) -> some View {
+    func leadingTitle(_ title: some View) -> some View {
         modifier(LeadingNavigationTitle(title: title))
     }
 }
 
-private struct LeadingNavigationTitle: ViewModifier {
-    let title: Text
+private struct LeadingNavigationTitle<Title: View>: ViewModifier {
+    let title: Title
     @State private var width: CGFloat = 0
 
     func body(content: Content) -> some View {
@@ -53,17 +53,23 @@ enum LibrarySection: CaseIterable, Hashable {
     }
 }
 
-struct LibraryHome: View {
+struct LibraryHome<ProfileButton: View>: View {
     @Environment(PodcastLibrary.self) private var library
     @Environment(PodcastPlayer.self) private var player
     @State private var query = EpisodeQuery()
     @State private var selectedEpisode: Episode?
     @State private var searchBarHeight: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.layoutDirection) private var layoutDirection
+    @State private var navigationTitleFrame: CGRect?
+    @State private var episodeTitleInset: CGFloat = 16
+    @State private var titlesMeet = false
 
     let archiveError: String?
     let retryArchive: () -> Void
     let signIn: () -> Void
     let browseShows: () -> Void
+    let profileButton: ProfileButton
     let openShow: (Show) -> Void
 
     private var hasEpisodes: Bool {
@@ -72,6 +78,7 @@ struct LibraryHome: View {
     }
 
     var body: some View {
+        let compact = hasEpisodes && titlesMeet
         List {
             ForEach(LibrarySection.allCases, id: \.self) { section in
                 NavigationLink(value: section) {
@@ -83,6 +90,38 @@ struct LibraryHome: View {
                     .frame(minHeight: 44)
                 }
             }
+
+            // This row scrolls through the navigation bar. Only the search field pins.
+            HStack {
+                Text("Latest Episodes")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                    .onGeometryChange(for: Bool.self) { geometry in
+                        guard let navigationTitleFrame else { return false }
+                        return geometry.frame(in: .global).minY <= navigationTitleFrame.maxY
+                    } action: { titlesMeet = $0 }
+                Spacer()
+                if hasEpisodes {
+                    EpisodeFilterMenu(filter: $query.filter)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+            }
+            .opacity(compact ? 0 : 1)
+            .accessibilityHidden(compact)
+            .allowsHitTesting(!compact)
+            .padding(.leading, episodeTitleInset)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                guard let navigationTitleFrame else { return 16 }
+                let row = geometry.frame(in: .global)
+                let inset = layoutDirection == .leftToRight
+                    ? navigationTitleFrame.minX - row.minX
+                    : row.maxX - navigationTitleFrame.maxX
+                return max(0, inset)
+            } action: { episodeTitleInset = $0 }
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
+
             Section {
                 if hasEpisodes {
                     episodeResults
@@ -92,27 +131,15 @@ struct LibraryHome: View {
                         .listRowSeparator(.hidden)
                 }
             } header: {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("Latest Episodes")
-                            .font(.headline)
-                            .accessibilityAddTraits(.isHeader)
-                        Spacer()
-                        if hasEpisodes {
-                            EpisodeFilterMenu(filter: $query.filter)
-                                .frame(minWidth: 44, minHeight: 44)
-                        }
-                    }
-                    if hasEpisodes {
-                        Color.clear
-                            .frame(height: searchBarHeight)
-                            .anchorPreference(key: SearchBarBounds.self, value: .bounds) { $0 }
-                    }
+                if hasEpisodes {
+                    Color.clear
+                        .frame(height: searchBarHeight)
+                        .anchorPreference(key: SearchBarBounds.self, value: .bounds) { $0 }
                 }
-                .textCase(nil)
             }
         }
         .listStyle(.plain)
+        .listSectionSpacing(0)
         // Keep the editing control outside recycled list cells so filtering retains keyboard focus.
         .overlayPreferenceValue(SearchBarBounds.self) { anchor in
             if let anchor {
@@ -132,6 +159,29 @@ struct LibraryHome: View {
             EpisodeDetails(episode: episode, source: .latestEpisodes)
         }
         .onChange(of: library.account) { query = EpisodeQuery() }
+        .leadingTitle(
+            // Reserve a single title slot so the text slides vertically without shifting sideways.
+            Text("Latest Episodes").hidden()
+                .overlay(alignment: .leading) {
+                    ZStack(alignment: .leading) {
+                        if compact {
+                            Text("Latest Episodes").transition(.move(edge: .bottom))
+                        } else {
+                            Text("Library").transition(.move(edge: .top))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .clipped()
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: compact)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { navigationTitleFrame = $0 }
+        )
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if compact { EpisodeFilterMenu(filter: $query.filter) }
+                profileButton
+            }
+        }
     }
 
     @ViewBuilder private var episodeResults: some View {

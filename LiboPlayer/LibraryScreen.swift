@@ -117,9 +117,7 @@ struct LibraryScreen: View {
         case .library:
             NavigationStack(path: $libraryPath) {
                 LibraryHome(archiveError: archiveError, retryArchive: { archiveRetry += 1 },
-                            signIn: { login = true }, browseShows: browseShows) { libraryPath.append($0) }
-                    .leadingTitle(Text(item.title))
-                    .toolbar { profileToolbarItem }
+                            signIn: { login = true }, browseShows: browseShows, profileButton: profileButton) { libraryPath.append($0) }
                     .navigationDestination(for: LibrarySection.self) { section in
                         Group {
                             switch section {
@@ -144,15 +142,17 @@ struct LibraryScreen: View {
     }
 
     private var profileToolbarItem: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                if library.isSignedIn { showingProfile = true }
-                else { login = true }
-            } label: {
-                Image(systemName: library.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle.badge.plus")
-            }
-            .accessibilityLabel(library.isSignedIn ? Text("Libo/Libo Account") : Text("Sign in with Telegram"))
+        ToolbarItem(placement: .topBarTrailing) { profileButton }
+    }
+
+    private var profileButton: some View {
+        Button {
+            if library.isSignedIn { showingProfile = true }
+            else { login = true }
+        } label: {
+            Image(systemName: library.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle.badge.plus")
         }
+        .accessibilityLabel(library.isSignedIn ? Text("Libo/Libo Account") : Text("Sign in with Telegram"))
     }
 
     @ViewBuilder private var catalogLoading: some View {
