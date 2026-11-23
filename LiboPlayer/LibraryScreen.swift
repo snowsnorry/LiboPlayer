@@ -17,6 +17,7 @@ struct LibraryScreen: View {
     @State private var tab = LibraryTab.allShows
     @State private var path: [Show] = []
     @State private var libraryPath = NavigationPath()
+    @State private var searchPath: [Show] = []
     @State private var login = false
     @State private var showingProfile = false
     @State private var restoringPreviousLogin = false
@@ -124,7 +125,7 @@ struct LibraryScreen: View {
                             switch section {
                             case .shows: followedShowsGrid
                             case .categories: CategoryList()
-                            case .saved, .downloaded: CollectionEpisodes(section: section)
+                            case .saved, .downloaded: CollectionEpisodes(section: section) { libraryPath.append($0) }
                             case .latestEpisodes: latestEpisodes
                             }
                         }.leadingTitle(Text(section.title))
@@ -139,13 +140,14 @@ struct LibraryScreen: View {
                     .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
         case .search:
-            NavigationStack {
+            NavigationStack(path: $searchPath) {
                 Group {
-                    if library.ready { EpisodeSearchScreen(query: $catalogSearch) }
+                    if library.ready { EpisodeSearchScreen(query: $catalogSearch) { searchPath.append($0) } }
                     else { catalogLoading }
                 }
                 .leadingTitle(Text(item.title))
                 .toolbar { profileToolbarItem }
+                .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
             }
         }
     }
@@ -220,7 +222,7 @@ struct LibraryScreen: View {
                 } else if library.feed.isEmpty {
                     ContentUnavailableView("No Episodes in Your Followed Shows", systemImage: "rectangle.stack")
                 } else {
-                    EpisodeList(episodes: library.feed, source: .latestEpisodes, query: $episodeQuery)
+                    EpisodeList(episodes: library.feed, source: .latestEpisodes, query: $episodeQuery) { libraryPath.append($0) }
                         .refreshable { await library.refresh() }
                 }
             }
@@ -243,7 +245,7 @@ private struct ShowScreen: View {
         ZStack {
             if let rows = library.episodes[show.id] {
                 if rows.isEmpty { ContentUnavailableView("No Episodes Yet", systemImage: "waveform") }
-                else { EpisodeList(episodes: rows, source: .show(show.id), query: $episodeQuery) }
+                else { EpisodeList(episodes: rows, source: .show(show.id), query: $episodeQuery, openShow: nil) }
             } else if let loadError {
                 ContentUnavailableView { Label("Couldn’t Load Episodes", systemImage: "exclamationmark.circle") }
                     description: { Text(loadError) }

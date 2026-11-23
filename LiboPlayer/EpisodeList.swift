@@ -5,12 +5,13 @@ struct EpisodeList: View {
     let episodes: [Episode]
     let source: QueueSource
     @Binding var query: EpisodeQuery
+    let openShow: ((Show) -> Void)?
     @State private var selectedEpisode: Episode?
 
     var body: some View {
         let results = query.results(in: episodes, isFinished: player.isFinished)
         List(results) { episode in
-            EpisodeListRow(episode: episode, source: source, showsPodcastName: showsPodcastName) {
+            EpisodeListRow(episode: episode, source: source, openShow: openShow) {
                 selectedEpisode = episode
             }
         }
@@ -46,11 +47,6 @@ struct EpisodeList: View {
             }
         }
     }
-
-    private var showsPodcastName: Bool {
-        if case .show = source { return false }
-        return true
-    }
 }
 
 struct EpisodeListRow: View {
@@ -59,8 +55,9 @@ struct EpisodeListRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     let episode: Episode
     let source: QueueSource
-    let showsPodcastName: Bool
+    let openShow: ((Show) -> Void)?
     let openDetails: () -> Void
+    private let rowInsets = EdgeInsets(top: 19, leading: 16, bottom: 19, trailing: 16)
     private let coverSize: CGFloat = 76
     private let spacing: CGFloat = 12
 
@@ -76,7 +73,7 @@ struct EpisodeListRow: View {
                 Cover(artwork: episode.artwork ?? show?.artwork, radius: 8)
                     .frame(width: coverSize)
                 VStack(alignment: .leading, spacing: 4) {
-                    metadata(showsPodcastName ? show : nil, played: played)
+                    metadata(openShow == nil ? nil : show, played: played)
                     Text(episode.name)
                         .font(.body.weight(started ? .regular : .semibold))
                         .lineLimit(typeSize.isAccessibilitySize ? 4 : 2)
@@ -94,6 +91,7 @@ struct EpisodeListRow: View {
                     .frame(minHeight: 44)
                 }
             }
+            .padding(rowInsets)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -101,38 +99,66 @@ struct EpisodeListRow: View {
         .overlay(alignment: .bottomLeading) {
             EpisodePlaybackButton(episode: episode, source: source)
                 .padding(.leading, coverSize + spacing)
+                .padding(rowInsets)
         }
         .opacity(played ? 0.75 : 1)
-        .padding(.vertical, 4)
-        .swipeActions(edge: .leading) {
-            Button {
-                Task { await player.mark(episode, played: !played) }
-            } label: {
-                Image(systemName: played ? "arrow.counterclockwise" : "checkmark")
+        .contentShape(Rectangle())
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16))
+        .contextMenu {
+            ControlGroup {
+                downloadButton(downloaded: downloaded, downloading: download != nil)
+                saveButton(saved: saved)
+                ShareLink(item: shareURL) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
             }
-            .accessibilityLabel(played ? Text("Mark as Unplayed") : Text("Mark as Played"))
-            .tint(.purple)
-            .disabled(library.busy || library.updatingPlayed.contains(episode.id))
+            Divider()
+            playedButton(played: played)
+            Divider()
+            Button("Go to Episode", systemImage: "info.square", action: openDetails)
+            if let openShow, let show {
+                Button("Go to Show", systemImage: "dot.radiowaves.left.and.right") { openShow(show) }
+            }
+        }
+        .swipeActions(edge: .leading) {
+            playedButton(played: played).labelStyle(.iconOnly).tint(.purple)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                Task { await library.toggleDownload(episode) }
-            } label: {
-                if downloaded { Image(systemName: "trash").accessibilityLabel("Remove Download") }
-                else if download != nil { Image(systemName: "ellipsis.circle").accessibilityLabel("Downloading…") }
-                else { Image(systemName: "arrow.down.circle").accessibilityLabel("Download") }
-            }
-            .tint(downloaded ? .red : .blue)
-            .disabled(download != nil || (!downloaded && episode.locked))
-
-            Button {
-                library.setSaved(!saved, for: episode)
-            } label: {
-                Image(systemName: saved ? "bookmark.slash" : "bookmark")
-            }
-            .accessibilityLabel(saved ? Text("Unsave") : Text("Save"))
-            .tint(.yellow)
+            downloadButton(downloaded: downloaded, downloading: download != nil)
+                .labelStyle(.iconOnly).tint(downloaded ? .red : .blue)
+            saveButton(saved: saved).labelStyle(.iconOnly).tint(.yellow)
         }
+        .listRowInsets(EdgeInsets())
+    }
+
+    private var shareURL: URL {
+        StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "item_\(episode.id)")])
+    }
+
+    private func downloadButton(downloaded: Bool, downloading: Bool) -> some View {
+        Button {
+            Task { await library.toggleDownload(episode) }
+        } label: {
+            if downloaded { Label("Remove Download", systemImage: "trash") }
+            else if downloading { Label("Downloading…", systemImage: "ellipsis.circle") }
+            else { Label("Download", systemImage: "arrow.down.circle") }
+        }
+        .disabled(downloading || (!downloaded && episode.locked))
+    }
+
+    private func saveButton(saved: Bool) -> some View {
+        let title: LocalizedStringKey = saved ? "Unsave" : "Save"
+        return Button(title, systemImage: saved ? "bookmark.slash" : "bookmark") {
+            library.setSaved(!saved, for: episode)
+        }
+    }
+
+    private func playedButton(played: Bool) -> some View {
+        let title: LocalizedStringKey = played ? "Mark as Unplayed" : "Mark as Played"
+        return Button(title, systemImage: played ? "arrow.counterclockwise" : "checkmark") {
+            Task { await player.mark(episode, played: !played) }
+        }
+        .disabled(library.busy || library.updatingPlayed.contains(episode.id))
     }
 
     private func metadata(_ show: Show?, played: Bool) -> some View {

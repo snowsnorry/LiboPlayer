@@ -155,6 +155,7 @@ struct CategoryList: View {
 struct CollectionEpisodes: View {
     @Environment(PodcastLibrary.self) private var library
     let section: LibrarySection
+    let openShow: (Show) -> Void
     @State private var query = EpisodeQuery()
 
     var body: some View {
@@ -165,7 +166,7 @@ struct CollectionEpisodes: View {
                 if saved { ContentUnavailableView("No Saved Episodes", systemImage: "bookmark") }
                 else { ContentUnavailableView("No Downloaded Episodes", systemImage: "arrow.down.circle") }
             } else {
-                EpisodeList(episodes: rows, source: saved ? .saved : .downloaded, query: $query)
+                EpisodeList(episodes: rows, source: saved ? .saved : .downloaded, query: $query, openShow: openShow)
             }
         }
         .searchable(text: $query.title, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search episode titles")

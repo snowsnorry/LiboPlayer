@@ -123,7 +123,14 @@
 
     },
     "Download" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузить"
+          }
+        }
+      }
     },
     "Download failed" : {
       "comment" : "Error message displayed when a download fails.",
@@ -133,7 +140,14 @@
 
     },
     "Downloading…" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузка…"
+          }
+        }
+      }
     },
     "Enter at least 3 characters." : {
 
@@ -155,6 +169,26 @@
     },
     "Follow Show" : {
 
+    },
+    "Go to Episode" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перейти к эпизоду"
+          }
+        }
+      }
+    },
+    "Go to Show" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перейти к шоу"
+          }
+        }
+      }
     },
     "Install Libo Player on your iPhone." : {
       "comment" : "A description of the action to install the Libo Player app on the user's iPhone.",
@@ -214,10 +248,24 @@
 
     },
     "Mark as Played" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметить как прослушанный"
+          }
+        }
+      }
     },
     "Mark as Unplayed" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметить как непрослушанный"
+          }
+        }
+      }
     },
     "Minimize player" : {
 
@@ -322,7 +370,14 @@
 
     },
     "Remove Download" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Удалить загрузку"
+          }
+        }
+      }
     },
     "Remove from Watch" : {
       "comment" : "The title of a confirmation dialog that removes an episode from the user's Apple Watch.",
@@ -340,7 +395,14 @@
 
     },
     "Save" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сохранить"
+          }
+        }
+      }
     },
     "Saved" : {
 
@@ -366,6 +428,16 @@
     },
     "Searching…" : {
 
+    },
+    "Share" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поделиться"
+          }
+        }
+      }
     },
     "Shows" : {
 
@@ -480,7 +552,14 @@
 
     },
     "Unsave" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Убрать из сохранённых"
+          }
+        }
+      }
     },
     "Untitled Episode" : {
 

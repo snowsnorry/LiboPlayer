@@ -3,6 +3,7 @@ import SwiftUI
 struct EpisodeSearchScreen: View {
     @Environment(PodcastLibrary.self) private var library
     @Binding var query: String
+    let openShow: (Show) -> Void
     @State private var retry = 0
     @State private var selectedEpisode: Episode?
     @State private var response: (request: Request, result: Result<[Episode], Error>)?
@@ -20,7 +21,7 @@ struct EpisodeSearchScreen: View {
         List {
             if response?.request == request, case let .success(episodes) = response?.result {
                 ForEach(episodes) { episode in
-                    EpisodeListRow(episode: episode, source: .show(episode.showID), showsPodcastName: true) {
+                    EpisodeListRow(episode: episode, source: .show(episode.showID), openShow: openShow) {
                         selectedEpisode = episode
                     }
                 }
