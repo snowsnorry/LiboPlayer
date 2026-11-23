@@ -58,57 +58,128 @@ enum LibrarySection: CaseIterable, Hashable {
 
 struct LibraryHome: View {
     @Environment(PodcastLibrary.self) private var library
+    let signIn: () -> Void
     let openShow: (Show) -> Void
 
     var body: some View {
         let recent = Show.recentlyUpdated(library.followedShows, archives: library.episodes)
-        List {
-            ForEach(LibrarySection.allCases, id: \.self) { section in
-                NavigationLink(value: section) {
-                    Label { Text(section.title) } icon: { Image(systemName: section.icon).foregroundStyle(.tint) }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                VStack(spacing: 0) {
+                    ForEach(LibrarySection.allCases, id: \.self) { section in
+                        sectionLink(section)
+                    }
                 }
-            }
-            if !recent.isEmpty {
-                Section {
-                    ShowGrid(shows: recent, showsDate: true, openShow: openShow)
-                        .listRowSeparator(.hidden)
-                } header: {
-                    Text("Recently Updated").font(.headline).foregroundStyle(.primary).textCase(nil)
-                        .accessibilityAddTraits(.isHeader)
+                .overlay(alignment: .top) { sectionDivider }
+                .padding(.bottom, recent.isEmpty ? 0 : 22)
+                if !recent.isEmpty {
+                    Section {
+                        ShowGrid(shows: recent, showsDate: true, signIn: signIn, openShow: openShow)
+                    } header: {
+                        Text("Recently Updated")
+                            .font(.headline).foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                            .background(.background)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                 }
             }
         }
-        .listStyle(.plain)
         .refreshable { await library.refresh() }
+    }
+
+    private func sectionLink(_ section: LibrarySection) -> some View {
+        NavigationLink(value: section) {
+            HStack(spacing: 16) {
+                Image(systemName: section.icon)
+                    .font(.title3).foregroundStyle(.tint)
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                Text(section.title)
+                Spacer()
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) { sectionDivider }
+    }
+
+    private var sectionDivider: some View {
+        Divider().padding(.leading, 56).padding(.trailing, 16)
     }
 }
 
 struct ShowGrid: View {
     let shows: [Show]
     var showsDate = false
+    let signIn: () -> Void
     let openShow: (Show) -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        let column = GridItem(.flexible(), spacing: 16, alignment: .top)
-        LazyVGrid(columns: typeSize.isAccessibilitySize ? [column] : [column, column], alignment: .leading, spacing: 22) {
+        let column = GridItem(.flexible(), spacing: 0, alignment: .top)
+        LazyVGrid(columns: typeSize.isAccessibilitySize ? [column] : [column, column], alignment: .leading, spacing: 6) {
             ForEach(shows) { show in
                 Button { openShow(show) } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Cover(artwork: show.artwork, radius: 12)
-                        Text(show.name).font(.subheadline.weight(.semibold)).lineLimit(2)
-                        if showsDate, let time = show.lastEpisode {
-                            Text("Updated \(Date(timeIntervalSince1970: time), style: .relative) ago")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
+                    tile(for: show)
+                        .padding(8)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.borderless)
                 .tint(.primary)
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16))
+                .contextMenu {
+                    ControlGroup {
+                        ShowFollowButton(show: show, signIn: signIn)
+                        ShareLink(item: StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "feed_\(show.id)")])) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    Divider()
+                    Button("Go to Show", systemImage: "dot.radiowaves.left.and.right") { openShow(show) }
+                } preview: {
+                    tile(for: show)
+                        .padding(16)
+                        .frame(idealWidth: 360)
+                }
             }
         }
+        .padding(.horizontal, 10)
+    }
+
+    private func tile(for show: Show) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Cover(artwork: show.artwork, radius: 12)
+            Text(show.name).font(.subheadline.weight(.semibold)).lineLimit(2)
+            if showsDate, let time = show.lastEpisode {
+                Text("Updated \(Date(timeIntervalSince1970: time), style: .relative) ago")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct ShowFollowButton: View {
+    @Environment(PodcastLibrary.self) private var library
+    let show: Show
+    let signIn: () -> Void
+
+    var body: some View {
+        let followed = library.subscriptions[show.id] != nil
+        let title: LocalizedStringKey = followed ? "Unfollow Show" : "Follow Show"
+        Button(title, systemImage: followed ? "heart.fill" : "heart") {
+            if library.account == nil { signIn() }
+            else { Task { await library.toggle(show) } }
+        }
+        .disabled(!library.changing.isEmpty || library.busy)
     }
 }
 

@@ -168,7 +168,14 @@
 
     },
     "Follow Show" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В избранное"
+          }
+        }
+      }
     },
     "Go to Episode" : {
       "localizations" : {
@@ -542,7 +549,14 @@
 
     },
     "Unfollow Show" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Убрать из избранного"
+          }
+        }
+      }
     },
     "Unlock your iPhone after restart, then open Libo Player." : {
       "comment" : "A description of the next step to take after the user's iPhone is not unlocked.",
@@ -565,7 +579,14 @@
 
     },
     "Updated %@ ago" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновлено %@ назад"
+          }
+        }
+      }
     },
     "Volume" : {
       "comment" : "A label for the volume control.",

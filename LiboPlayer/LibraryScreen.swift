@@ -117,7 +117,7 @@ struct LibraryScreen: View {
             }
         case .library:
             NavigationStack(path: $libraryPath) {
-                LibraryHome { libraryPath.append($0) }
+                LibraryHome(signIn: { login = true }) { libraryPath.append($0) }
                     .leadingTitle(Text(item.title))
                     .toolbar { profileToolbarItem }
                     .navigationDestination(for: LibrarySection.self) { section in
@@ -132,8 +132,7 @@ struct LibraryScreen: View {
                     }
                     .navigationDestination(for: StudioCategory.self) { category in
                         ScrollView {
-                            ShowGrid(shows: library.followedShows(in: category)) { libraryPath.append($0) }
-                                .padding(.horizontal, 18)
+                            ShowGrid(shows: library.followedShows(in: category), signIn: { login = true }) { libraryPath.append($0) }
                         }
                         .leadingTitle(Text(verbatim: category.name))
                     }
@@ -173,8 +172,7 @@ struct LibraryScreen: View {
         let term = showSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         let shows = term.isEmpty ? library.shows : library.shows.filter { $0.name.localizedStandardContains(term) }
         return ScrollView {
-            ShowGrid(shows: shows) { path.append($0) }
-                .padding(.horizontal, 18)
+            ShowGrid(shows: shows, signIn: { login = true }) { path.append($0) }
                 .padding(.bottom, 24)
         }
         .overlay {
@@ -193,8 +191,7 @@ struct LibraryScreen: View {
                 actions: { Button("Browse Shows") { path.removeAll(); tab = .allShows } }
         } else {
             ScrollView {
-                ShowGrid(shows: library.followedShows.sorted(by: Show.alphabetical)) { libraryPath.append($0) }
-                    .padding(.horizontal, 18)
+                ShowGrid(shows: library.followedShows.sorted(by: Show.alphabetical), signIn: { login = true }) { libraryPath.append($0) }
             }.refreshable { await library.refresh() }
         }
     }
@@ -258,14 +255,8 @@ private struct ShowScreen: View {
         .leadingTitle(Text(verbatim: show.name))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                let saved = library.subscriptions[show.id] != nil
-                Button {
-                    if library.account == nil { signIn() }
-                    else { Task { await library.toggle(show) } }
-                } label: {
-                    Image(systemName: saved ? "heart.fill" : "heart")
-                }.accessibilityLabel(saved ? Text("Unfollow Show") : Text("Follow Show"))
-                .disabled(!library.changing.isEmpty || library.busy)
+                ShowFollowButton(show: show, signIn: signIn)
+                    .labelStyle(.iconOnly)
             }
         }
         .task(id: "\(ObjectIdentifier(library.session))-\(retry)") {
