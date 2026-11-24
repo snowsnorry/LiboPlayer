@@ -114,8 +114,8 @@ struct EpisodeListRow: View {
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16))
         .contextMenu {
             ControlGroup {
-                downloadButton(downloaded: downloaded, downloading: download != nil)
-                saveButton(saved: saved)
+                EpisodeDownloadButton(episode: episode)
+                EpisodeSaveButton(episode: episode)
                 ShareLink(item: shareURL) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
@@ -132,33 +132,14 @@ struct EpisodeListRow: View {
             playedButton(played: played).labelStyle(.iconOnly).tint(.purple)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            downloadButton(downloaded: downloaded, downloading: download != nil)
-                .labelStyle(.iconOnly).tint(downloaded ? .red : .blue)
-            saveButton(saved: saved).labelStyle(.iconOnly).tint(.yellow)
+            EpisodeDownloadButton(episode: episode).labelStyle(.iconOnly)
+            EpisodeSaveButton(episode: episode).labelStyle(.iconOnly)
         }
         .listRowInsets(EdgeInsets())
     }
 
     private var shareURL: URL {
         StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "item_\(episode.id)")])
-    }
-
-    private func downloadButton(downloaded: Bool, downloading: Bool) -> some View {
-        Button {
-            Task { await library.toggleDownload(episode) }
-        } label: {
-            if downloaded { Label("Remove Download", systemImage: "trash") }
-            else if downloading { Label("Downloading…", systemImage: "ellipsis.circle") }
-            else { Label("Download", systemImage: "arrow.down.circle") }
-        }
-        .disabled(downloading || (!downloaded && episode.locked))
-    }
-
-    private func saveButton(saved: Bool) -> some View {
-        let title: LocalizedStringKey = saved ? "Unsave" : "Save"
-        return Button(title, systemImage: saved ? "bookmark.slash" : "bookmark") {
-            library.setSaved(!saved, for: episode)
-        }
     }
 
     private func playedButton(played: Bool) -> some View {
@@ -186,16 +167,53 @@ struct EpisodeListRow: View {
     }
 }
 
+struct EpisodeSaveButton: View {
+    @Environment(PodcastLibrary.self) private var library
+    let episode: Episode
+
+    var body: some View {
+        let saved = library.collection.isSaved(episode.id)
+        let title: LocalizedStringKey = saved ? "Unsave" : "Save"
+        Button {
+            library.setSaved(!saved, for: episode)
+        } label: {
+            Label(title, systemImage: saved ? "bookmark.slash" : "bookmark")
+        }
+        .tint(.yellow)
+    }
+}
+
+struct EpisodeDownloadButton: View {
+    @Environment(PodcastLibrary.self) private var library
+    let episode: Episode
+
+    var body: some View {
+        let downloaded = library.collection.localURL(episode.id) != nil
+        let downloading = library.collection.downloadsInProgress[episode.id] != nil
+        Button {
+            Task { await library.toggleDownload(episode) }
+        } label: {
+            if downloaded { Label("Remove Download", systemImage: "trash") }
+            else if downloading { Label("Downloading…", systemImage: "ellipsis.circle") }
+            else { Label("Download", systemImage: "arrow.down.circle") }
+        }
+        .disabled(downloading || (!downloaded && episode.locked))
+        .tint(downloaded ? .red : .blue)
+    }
+}
+
 struct EpisodePlaybackButton: View {
     @Environment(PodcastPlayer.self) private var player
     let episode: Episode
     let source: QueueSource
+    var prominentHeight: CGFloat? = nil
 
     var body: some View {
         let isCurrent = player.current?.id == episode.id
         let playing = isCurrent && player.playing
         let loading = isCurrent && player.loading
         let position = player.playbackPosition(for: episode)
+        let replay = player.isFinished(episode) && position == 0
         let duration = isCurrent && player.duration > 0 ? player.duration : episode.duration
         let hasDuration = duration.isFinite && duration > 0
         let hasProgress = hasDuration && position > 0 && position < duration
@@ -205,7 +223,7 @@ struct EpisodePlaybackButton: View {
                 if loading {
                     ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: icon(playing: playing))
+                    Image(systemName: icon(playing: playing, replay: replay))
                 }
                 if hasProgress {
                     ProgressView(value: position, total: duration)
@@ -219,29 +237,32 @@ struct EpisodePlaybackButton: View {
                         .lineLimit(1)
                 }
             }
-            .font(.subheadline.weight(.semibold))
+            .font(prominentHeight == nil ? .subheadline.weight(.semibold) : .headline)
             .foregroundStyle(episode.locked ? Color.secondary : Color.purple)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, prominentHeight == nil ? 12 : 16)
             .padding(.vertical, 6)
+            .frame(minWidth: prominentHeight, minHeight: prominentHeight)
             .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(loading || episode.locked)
-        .accessibilityLabel(label(playing: playing, loading: loading))
+        .accessibilityLabel(label(playing: playing, loading: loading, replay: replay))
         .accessibilityValue(timeLabel(remainingTime, hasProgress: hasProgress))
     }
 
-    private func icon(playing: Bool) -> String {
+    private func icon(playing: Bool, replay: Bool) -> String {
         if episode.locked { return "lock.fill" }
-        return playing ? "pause.fill" : "play.fill"
+        if playing { return "pause.fill" }
+        return replay ? "arrow.clockwise" : "play.fill"
     }
 
-    private func label(playing: Bool, loading: Bool) -> Text {
+    private func label(playing: Bool, loading: Bool, replay: Bool) -> Text {
         if episode.locked { return Text("Subscription required") }
         if loading { return Text("Loading audio…") }
-        return playing ? Text("Pause") : Text("Play")
+        if playing { return Text("Pause") }
+        return replay ? Text("Replay") : Text("Play")
     }
 
     private func timeLabel(_ remainingTime: Duration?, hasProgress: Bool) -> Text {

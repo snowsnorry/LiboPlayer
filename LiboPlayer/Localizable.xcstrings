@@ -404,7 +404,7 @@
       }
     },
     "episode.status.played" : {
-      "comment" : "VoiceOver status for a single episode.",
+      "comment" : "Listening status for a single episode.",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -946,6 +946,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Удалить аудиофайл с этих часов?"
+          }
+        }
+      }
+    },
+    "Replay" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Воспроизвести заново"
           }
         }
       }

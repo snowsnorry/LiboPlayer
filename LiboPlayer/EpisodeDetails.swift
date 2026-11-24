@@ -23,7 +23,7 @@ struct EpisodeDetails: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                EpisodePlaybackButton(episode: episode, source: source)
+                EpisodeDetailActions(episode: episode, source: source)
                 if let summary {
                     Divider()
                     Text(summary)
@@ -74,5 +74,64 @@ struct EpisodeDetails: View {
         let text = try? NSAttributedString(data: Data(markup.utf8), options: options, documentAttributes: nil)
             .string.trimmingCharacters(in: .whitespacesAndNewlines)
         return text.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+
+private struct EpisodeDetailActions: View {
+    @Environment(PodcastPlayer.self) private var player
+    @ScaledMetric(relativeTo: .headline) private var buttonHeight: CGFloat = 48
+    let episode: Episode
+    let source: QueueSource
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    playbackButton
+                    collectionButtons
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    playbackButton
+                    collectionButtons
+                }
+            }
+            if player.isFinished(episode) {
+                Label {
+                    Text(LocalizedStringResource("episode.status.played", defaultValue: "Played"))
+                } icon: {
+                    Image(systemName: "checkmark")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var playbackButton: some View {
+        EpisodePlaybackButton(episode: episode, source: source, prominentHeight: max(44, buttonHeight))
+            .fixedSize()
+    }
+
+    private var collectionButtons: some View {
+        HStack(spacing: 10) {
+            EpisodeSaveButton(episode: episode)
+            EpisodeDownloadButton(episode: episode)
+        }
+        .buttonStyle(.plain)
+        .labelStyle(EpisodeActionIcon(diameter: max(44, buttonHeight)))
+    }
+}
+
+private struct EpisodeActionIcon: LabelStyle {
+    let diameter: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        Label(configuration)
+            .labelStyle(.iconOnly)
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(.tint)
+            .frame(width: diameter, height: diameter)
+            .background(Color(uiColor: .tertiarySystemFill), in: Circle())
+            .contentShape(Circle())
     }
 }
