@@ -1,10 +1,12 @@
 # Libo Player
 
-Libo Player is a native iPhone app for listening to [Libo/Libo podcasts](https://play.libolibo.me/). Browse shows, search for an episode by title, or sign in with Telegram to see the latest episodes from the shows you follow.
+Libo Player is a native iPhone and iPad app for listening to [Libo/Libo podcasts](https://play.libolibo.me/). Browse shows, search for an episode by title, or sign in with Telegram to see the latest episodes from the shows you follow.
 
 ## Library
 
-On iPhone, Library opens with Following, Saved and Downloaded. Below them, Latest Episodes lists releases from followed shows, newest first. You can search by episode title, filter by listening status or start playback directly in the feed. In an episode list, swipe right to change its played status, or swipe left to save or download it. Either action can be undone independently.
+Library opens with Following, Saved and Downloaded. Below them, Latest Episodes lists releases from followed shows, newest first. You can search by episode title, filter by listening status or start playback directly in the feed. In an episode list, swipe right to change its played status, or swipe left to save or download it. Either action can be undone independently.
+
+On iPad, the collection links share a row and the search field and listening filter stay visible as you scroll. Tap the ellipsis on an episode or on the floating mini-player to open the same actions as a long press on an episode.
 
 Downloaded audio plays offline after restarting the app. Guest collections and each signed-in account have separate storage. Saved bookmarks can be changed offline and sync with the paired Apple Watch when available. Each device keeps its own downloads.
 
@@ -22,12 +24,12 @@ The web player exchanges the Telegram widget result at `POST /webAuth` and store
 
 On launch the native app checks the saved session by loading the profile it needs for the catalog. A rejected guest session is replaced once. A rejected member session requires confirming the account again. Timeouts and server errors preserve the saved credential. Requests with credentials do not follow redirects.
 
-## Run on iPhone or Simulator
+## Run on iPhone, iPad or Simulator
 
-Use Xcode on macOS with the iOS 26.1 SDK or later and an iPhone or simulator running iOS 17 or later. On iOS 26 and later, scrolling down collapses the tab bar and moves the mini-player beside the current tab and Search. The project uses Apple frameworks and has no external package dependencies.
+Use Xcode on macOS with the iOS 26.1 SDK or later and a device or simulator running iOS or iPadOS 17 or later. On iPhone with iOS 26 or later, scrolling down collapses the tab bar and moves the mini-player beside the current tab and Search. The project uses Apple frameworks and has no external package dependencies.
 
 1. Open `LiboPlayer.xcodeproj` in Xcode.
-2. Select the `LiboPlayer` scheme and an iPhone simulator. For a physical iPhone, select your device and set your development team under **Signing & Capabilities**. If needed, choose a bundle identifier available to your team.
+2. Select the `LiboPlayer` scheme and an iPhone or iPad simulator. For a physical device, select it and set your development team under **Signing & Capabilities**. If needed, choose a bundle identifier available to your team.
 3. Press **⌘R** to build and run. To follow shows, open the account button on the **All Shows** tab and sign in with Telegram.
 
 ## Apple Watch

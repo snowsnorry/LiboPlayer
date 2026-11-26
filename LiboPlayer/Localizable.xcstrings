@@ -1108,6 +1108,16 @@
         }
       }
     },
+    "Sign in to Libo/Libo" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вход в Либо/Либо"
+          }
+        }
+      }
+    },
     "Sign in to see episodes from the shows you follow." : {
       "localizations" : {
         "ru" : {
@@ -1247,7 +1257,6 @@
       }
     },
     "Telegram" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {

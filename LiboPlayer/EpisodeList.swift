@@ -51,7 +51,10 @@ struct EpisodeFilterMenu: View {
                   : "line.3.horizontal.decrease.circle")
                 .labelStyle(.iconOnly)
                 .environment(\.symbolVariants, .none)
-                .foregroundStyle(active ? Color.accentColor : .primary)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
         .accessibilityValue(Text(filter.title))
     }
@@ -65,7 +68,14 @@ struct EpisodeListRow: View {
     let source: QueueSource
     let openShow: ((Show) -> Void)?
     let openDetails: () -> Void
-    private let rowInsets = EdgeInsets(top: 19, leading: 16, bottom: 19, trailing: 16)
+    @ScaledMetric(relativeTo: .caption) private var playedMarkHeight: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var statusHeight: CGFloat = 12
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    private var rowInsets: EdgeInsets {
+        let horizontal: CGFloat = isPad ? 24 : 16
+        let vertical: CGFloat = isPad ? 10 : 19
+        return EdgeInsets(top: vertical, leading: horizontal, bottom: vertical, trailing: horizontal)
+    }
     private let coverSize: CGFloat = 76
     private let spacing: CGFloat = 12
 
@@ -88,11 +98,12 @@ struct EpisodeListRow: View {
                         .foregroundStyle(played ? .secondary : .primary)
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
-                        if saved { Image(systemName: "bookmark.fill").accessibilityLabel(Text(LocalizedStringResource("episode.status.saved", defaultValue: "Saved"))) }
+                        if saved { statusIcon("bookmark.fill", height: statusHeight).accessibilityLabel(Text(LocalizedStringResource("episode.status.saved", defaultValue: "Saved"))) }
                         if let download { EpisodeDownloadRing(download: download) }
                         else if downloaded {
-                            Image(systemName: "arrow.down.circle.fill").accessibilityLabel(Text(LocalizedStringResource("episode.status.downloaded", defaultValue: "Downloaded")))
+                            statusIcon("arrow.down.circle.fill", height: statusHeight).accessibilityLabel(Text(LocalizedStringResource("episode.status.downloaded", defaultValue: "Downloaded")))
                         }
+                        if isPad { Color.clear.frame(width: 44, height: 1).accessibilityHidden(true) }
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -109,27 +120,28 @@ struct EpisodeListRow: View {
                 .padding(.leading, coverSize + spacing)
                 .padding(rowInsets)
         }
+        .overlay(alignment: .bottomTrailing) {
+            if isPad {
+                Menu {
+                    episodeActions
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: statusHeight, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .accessibilityLabel("More")
+                .accessibilityValue(Text(verbatim: episode.name))
+                .padding(rowInsets)
+            }
+        }
         .opacity(played ? 0.75 : 1)
         .contentShape(Rectangle())
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16))
-        .contextMenu {
-            ControlGroup {
-                EpisodeDownloadButton(episode: episode)
-                EpisodeSaveButton(episode: episode)
-                ShareLink(item: shareURL) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-            Divider()
-            playedButton(played: played)
-            Divider()
-            Button("Go to Episode", systemImage: "info.square", action: openDetails)
-            if let openShow, let show {
-                Button("Go to Show", systemImage: "dot.radiowaves.left.and.right") { openShow(show) }
-            }
-        }
+        .contextMenu { episodeActions }
         .swipeActions(edge: .leading) {
-            playedButton(played: played).labelStyle(.iconOnly).tint(.purple)
+            EpisodePlayedButton(episode: episode).labelStyle(.iconOnly).tint(.purple)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             EpisodeDownloadButton(episode: episode).labelStyle(.iconOnly)
@@ -138,21 +150,21 @@ struct EpisodeListRow: View {
         .listRowInsets(EdgeInsets())
     }
 
-    private var shareURL: URL {
-        StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "item_\(episode.id)")])
+    private var episodeActions: some View {
+        EpisodeMenuActions(episode: episode, openDetails: openDetails, openShow: openShow)
     }
 
-    private func playedButton(played: Bool) -> some View {
-        let title: LocalizedStringKey = played ? "Mark as Unplayed" : "Mark as Played"
-        return Button(title, systemImage: played ? "arrow.counterclockwise" : "checkmark") {
-            Task { await player.mark(episode, played: !played) }
-        }
-        .disabled(library.busy || library.updatingPlayed.contains(episode.id))
+    private func statusIcon(_ name: String, height: CGFloat) -> some View {
+        Image(systemName: name)
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .fixedSize()
     }
 
     private func metadata(_ show: Show?, played: Bool) -> some View {
         HStack(spacing: 5) {
-            if played { Image(systemName: "checkmark").accessibilityLabel(Text(LocalizedStringResource("episode.status.played", defaultValue: "Played"))) }
+            if played { statusIcon("checkmark", height: playedMarkHeight).accessibilityLabel(Text(LocalizedStringResource("episode.status.played", defaultValue: "Played"))) }
             if episode.published > 0 {
                 Text(Date(timeIntervalSince1970: episode.published), format: .dateTime.day().month().year())
                     .layoutPriority(1)
@@ -164,6 +176,45 @@ struct EpisodeListRow: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+}
+
+struct EpisodeMenuActions: View {
+    @Environment(PodcastLibrary.self) private var library
+    let episode: Episode
+    let openDetails: () -> Void
+    let openShow: ((Show) -> Void)?
+
+    var body: some View {
+        ControlGroup {
+            EpisodeDownloadButton(episode: episode)
+            EpisodeSaveButton(episode: episode)
+            ShareLink(item: StudioSite.home.appending(queryItems: [URLQueryItem(name: "start", value: "item_\(episode.id)")])) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
+        Divider()
+        EpisodePlayedButton(episode: episode)
+        Divider()
+        Button("Go to Episode", systemImage: "info.square", action: openDetails)
+        if let openShow, let show = library.show(for: episode) {
+            Button("Go to Show", systemImage: "dot.radiowaves.left.and.right") { openShow(show) }
+        }
+    }
+}
+
+private struct EpisodePlayedButton: View {
+    @Environment(PodcastLibrary.self) private var library
+    @Environment(PodcastPlayer.self) private var player
+    let episode: Episode
+
+    var body: some View {
+        let played = player.isFinished(episode)
+        let title: LocalizedStringKey = played ? "Mark as Unplayed" : "Mark as Played"
+        Button(title, systemImage: played ? "arrow.counterclockwise" : "checkmark") {
+            Task { await player.mark(episode, played: !played) }
+        }
+        .disabled(library.busy || library.updatingPlayed.contains(episode.id))
     }
 }
 

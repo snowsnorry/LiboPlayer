@@ -70,12 +70,7 @@ struct PlayerSheet: View {
                 Button { dismiss() } label: { Image(systemName: "chevron.down").frame(width: 44, height: 44) }
                     .accessibilityLabel("Minimize player")
                 Spacer()
-                Menu {
-                    ForEach([0.75, 1, 1.25, 1.5, 1.75, 2], id: \.self) { value in
-                        Button("\(value.formatted())×") { player.setSpeed(Float(value)) }
-                    }
-                } label: { Text("\(player.speed.formatted())×").font(.headline.monospacedDigit()) }
-                .accessibilityLabel("Playback speed")
+                PlaybackSpeedMenu()
             }
             Cover(artwork: item.artwork ?? show?.artwork, radius: 18)
                 .frame(maxHeight: large ? 360 : 190).frame(maxWidth: .infinity)
@@ -112,5 +107,117 @@ struct PlayerSheet: View {
 
     private func clock(_ seconds: Double) -> String {
         Duration.seconds(Int(max(0, seconds))).formatted(.time(pattern: .minuteSecond))
+    }
+}
+
+private struct PlaybackSpeedMenu: View {
+    @Environment(PodcastPlayer.self) private var player
+
+    var body: some View {
+        Menu {
+            Picker("Playback speed", selection: Binding(get: { player.speed }, set: player.setSpeed)) {
+                ForEach([Float(0.75), 1, 1.25, 1.5, 1.75, 2], id: \.self) { rate in
+                    Text(verbatim: "\(rate.formatted())×").tag(rate)
+                }
+            }
+        } label: {
+            Text(verbatim: "\(player.speed.formatted())×").font(.headline.monospacedDigit())
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .accessibilityLabel("Playback speed")
+        .accessibilityValue(Text(verbatim: "\(player.speed.formatted())×"))
+    }
+}
+
+struct PadMiniPlayer: View {
+    @Environment(PodcastPlayer.self) private var player
+    @Environment(PodcastLibrary.self) private var library
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let episode: Episode
+    let openDetails: () -> Void
+    let openShow: (Show) -> Void
+
+    var body: some View {
+        let narrow = sizeClass == .compact || typeSize.isAccessibilitySize
+        let shape = RoundedRectangle(cornerRadius: narrow ? 24 : 36, style: .continuous)
+        let bar = Group {
+            if narrow {
+                VStack(spacing: 0) {
+                    HStack { nowPlaying; episodeMenu }
+                    transport
+                }
+            } else {
+                HStack(spacing: 14) {
+                    transport
+                    nowPlaying
+                    episodeMenu
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .foregroundStyle(.primary)
+        .buttonStyle(.plain)
+        Group {
+            if #available(iOS 26, *) {
+                bar.glassEffect(.regular, in: shape)
+            } else {
+                bar.background(.regularMaterial, in: shape)
+            }
+        }
+        .frame(maxWidth: 1000)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+
+    private var transport: some View {
+        HStack(spacing: 4) {
+            PlaybackSpeedMenu()
+            Button { player.seek(player.position - 15) } label: {
+                Image(systemName: "gobackward.15").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Skip back 15 seconds")
+            Button { player.toggle() } label: {
+                Group {
+                    if player.loading { ProgressView() }
+                    else { Image(systemName: player.playing ? "pause.fill" : "play.fill").font(.title) }
+                }.frame(width: 44, height: 44)
+            }
+            .accessibilityLabel(player.playing ? Text("Pause") : Text("Play"))
+            Button { player.seek(player.position + 30) } label: {
+                Image(systemName: "goforward.30").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Skip forward 30 seconds")
+        }
+        .font(.title2)
+        .disabled(player.loading)
+    }
+
+    private var nowPlaying: some View {
+        let show = library.show(for: episode)
+        return Button { player.expanded = true } label: {
+            HStack(spacing: 10) {
+                Cover(artwork: episode.artwork ?? show?.artwork, radius: 6).frame(width: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(episode.name).font(.headline).lineLimit(1)
+                    if let show { Text(show.name).font(.subheadline).foregroundStyle(.secondary).lineLimit(1) }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .accessibilityHint("Open player")
+    }
+
+    private var episodeMenu: some View {
+        Menu {
+            EpisodeMenuActions(episode: episode, openDetails: openDetails, openShow: openShow)
+        } label: {
+            Image(systemName: "ellipsis").font(.title3.weight(.semibold))
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("More")
+        .accessibilityValue(Text(verbatim: episode.name))
     }
 }

@@ -4,6 +4,7 @@ import WebKit
 struct SignInPage: View {
     @Environment(PodcastLibrary.self) private var library
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let restoringPreviousLogin: Bool
     @State private var attempt = 0
     @State private var showingTelegram = false
@@ -13,31 +14,93 @@ struct SignInPage: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        AccountPanel(expanded: showingTelegram, closeDisabled: saving, close: { cancelled = true; dismiss() }) {
-            if !showingTelegram {
-                Text("Sign in to see the shows you follow.")
-                    .foregroundStyle(.secondary)
-            }
-            LoginView(restorePrevious: restoringPreviousLogin && attempt == 0,
-                      popupChanged: { showingTelegram = $0 }) { result in
-                guard !cancelled, !saving, errorMessage == nil else { return }
-                switch result {
-                case .success(let credential): finish(using: credential)
-                case .failure(let error): errorMessage = LibraryError.message(for: error)
+        Group {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                padDialog
+            } else {
+                AccountPanel(expanded: showingTelegram, closeDisabled: saving, close: close) {
+                    explanation
+                    loginView
                 }
+                .alert("Libo/Libo", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                    Button("Try Again", action: retry)
+                    Button("Cancel", role: .cancel, action: close)
+                } message: { Text(errorMessage ?? "") }
             }
-            .id(attempt)
-            .disabled(saving)
-            .overlay { if saving { ProgressView() } }
         }
         .interactiveDismissDisabled(saving)
-        .alert("Libo/Libo", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("Try Again") {
-                if let pendingCredential { finish(using: pendingCredential) }
-                else { showingTelegram = false; attempt += 1 }
+    }
+
+    private var padDialog: some View {
+        let expanded = showingTelegram && errorMessage == nil
+        return GeometryReader { geometry in
+            ZStack {
+                Color.black.opacity(0.45).ignoresSafeArea()
+                    .onTapGesture { if !saving { close() } }
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 8) {
+                    AccountPanelHeader(title: expanded ? "Telegram" : "Sign in to Libo/Libo",
+                                       closeDisabled: saving, close: close)
+                    if let errorMessage {
+                        Text(errorMessage).foregroundStyle(.secondary)
+                        Button("Try Again", action: retry).buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                    } else {
+                        explanation
+                        loginView
+                            .frame(minHeight: expanded ? 0 : 54, maxHeight: expanded ? .infinity : 54)
+                            .padding(.top, expanded ? 0 : 4)
+                    }
+                }
+                .padding(24)
+                .frame(width: min(expanded ? 500 : 400, max(1, geometry.size.width - 32)),
+                       height: expanded ? min(580, max(1, geometry.size.height - 32)) : nil)
+                .fixedSize(horizontal: false, vertical: !expanded)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
+                .shadow(color: .black.opacity(0.15), radius: 20, y: 6)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: expanded)
+                .accessibilityAction(.escape) { if !saving { close() } }
             }
-            Button("Cancel", role: .cancel) { cancelled = true; dismiss() }
-        } message: { Text(errorMessage ?? "") }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .presentationBackground(.clear)
+    }
+
+    @ViewBuilder private var explanation: some View {
+        if !showingTelegram {
+            Text("Sign in to see the shows you follow.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var loginView: some View {
+        LoginView(restorePrevious: restoringPreviousLogin && attempt == 0,
+                  popupChanged: { showingTelegram = $0 }) { result in
+            guard !cancelled, !saving, errorMessage == nil else { return }
+            switch result {
+            case .success(let credential): finish(using: credential)
+            case .failure(let error): errorMessage = LibraryError.message(for: error)
+            }
+        }
+        .id(attempt)
+        .disabled(saving)
+        .overlay { if saving { ProgressView() } }
+    }
+
+    private func close() {
+        cancelled = true
+        dismiss()
+    }
+
+    private func retry() {
+        errorMessage = nil
+        if let pendingCredential {
+            finish(using: pendingCredential)
+        } else {
+            showingTelegram = false
+            attempt += 1
+        }
     }
 
     private func finish(using credential: StudioCredential) {

@@ -10,14 +10,38 @@ private enum LibraryTab: CaseIterable {
     }
 }
 
+private struct PlayerEpisodeDestination: Hashable {
+    let episode: Episode
+    let source: QueueSource
+}
+
+private extension View {
+    @ViewBuilder func signInDialog<Dialog: View>(isPresented: Binding<Bool>, onDismiss: @escaping () -> Void,
+                                                   @ViewBuilder content: @escaping () -> Dialog) -> some View {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            fullScreenCover(isPresented: isPresented, onDismiss: onDismiss, content: content)
+        } else {
+            sheet(isPresented: isPresented, onDismiss: onDismiss, content: content)
+        }
+    }
+
+    @ViewBuilder func tabRootTitle(_ title: LocalizedStringResource) -> some View {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            navigationTitle(Text(verbatim: "")).navigationBarTitleDisplayMode(.inline)
+        } else {
+            leadingTitle(Text(title))
+        }
+    }
+}
+
 struct LibraryScreen: View {
     @Environment(PodcastLibrary.self) private var library
     @Environment(PodcastPlayer.self) private var player
     @Environment(\.scenePhase) private var phase
     @State private var tab = LibraryTab.allShows
-    @State private var path: [Show] = []
+    @State private var path = NavigationPath()
     @State private var libraryPath = NavigationPath()
-    @State private var searchPath: [Show] = []
+    @State private var searchPath = NavigationPath()
     @State private var login = false
     @State private var showingProfile = false
     @State private var restoringPreviousLogin = false
@@ -52,7 +76,7 @@ struct LibraryScreen: View {
             .onChange(of: phase) { _, phase in if phase != .active { player.save() } }
             .sheet(isPresented: Binding(get: { player.expanded }, set: { player.expanded = $0 })) { PlayerSheet().presentationDragIndicator(.visible) }
             .sheet(isPresented: $showingProfile) { AccountProfileScreen() }
-            .sheet(isPresented: $login, onDismiss: {
+            .signInDialog(isPresented: $login, onDismiss: {
                 restoringPreviousLogin = false
                 if !library.ready { Task { await library.refresh() } }
             }) { SignInPage(restoringPreviousLogin: restoringPreviousLogin) }
@@ -64,7 +88,14 @@ struct LibraryScreen: View {
     }
 
     @ViewBuilder private var tabsWithPlayer: some View {
-        if #available(iOS 26.1, *) {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            if #available(iOS 18.0, *) {
+                modernTabs
+                    .safeAreaInset(edge: .bottom, spacing: 0) { padPlayer }
+            } else {
+                legacyTabs
+            }
+        } else if #available(iOS 26.1, *) {
             floatingTabs.tabViewBottomAccessory(isEnabled: player.current != nil) { MiniPlayerAccessory() }
         } else if #available(iOS 26.0, *) {
             if player.current != nil {
@@ -73,71 +104,101 @@ struct LibraryScreen: View {
                 floatingTabs
             }
         } else {
-            TabView(selection: $tab) {
-                ForEach(LibraryTab.allCases, id: \.self) { item in
-                    screen(for: item)
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            if player.current != nil {
-                                MiniPlayer(inline: false)
-                                    .padding(.vertical, 4)
-                                    .background(.regularMaterial)
-                            }
+            legacyTabs
+        }
+    }
+
+    private var legacyTabs: some View {
+        TabView(selection: $tab) {
+            ForEach(LibraryTab.allCases, id: \.self) { item in
+                screen(for: item)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if UIDevice.current.userInterfaceIdiom == .pad {
+                            padPlayer
+                        } else if player.current != nil {
+                            MiniPlayer(inline: false)
+                                .padding(.vertical, 4)
+                                .background(.regularMaterial)
                         }
-                        .tabItem { Label { Text(item.title) } icon: { Image(systemName: item.icon) } }
-                        .tag(item)
-                }
+                    }
+                    .tabItem { Label { Text(item.title) } icon: { Image(systemName: item.icon) } }
+                    .tag(item)
             }
+        }
+    }
+
+    @ViewBuilder private var padPlayer: some View {
+        if let episode = player.current {
+            PadMiniPlayer(episode: episode, openDetails: {
+                navigationPath(for: tab).wrappedValue.append(PlayerEpisodeDestination(episode: episode, source: player.source))
+            }, openShow: { show in
+                navigationPath(for: tab).wrappedValue.append(show)
+            })
         }
     }
 
     @available(iOS 26.0, *)
     private var floatingTabs: some View {
+        modernTabs.tabBarMinimizeBehavior(.onScrollDown)
+    }
+
+    @available(iOS 18.0, *)
+    private var modernTabs: some View {
         TabView(selection: $tab) {
             Tab("All Shows", systemImage: LibraryTab.allShows.icon, value: LibraryTab.allShows) { screen(for: .allShows) }
             Tab("Library", systemImage: LibraryTab.library.icon, value: LibraryTab.library) { screen(for: .library) }
             Tab(value: LibraryTab.search, role: .search) { screen(for: .search) }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
     }
 
-    @ViewBuilder private func screen(for item: LibraryTab) -> some View {
+    private func navigationPath(for item: LibraryTab) -> Binding<NavigationPath> {
+        switch item {
+        case .allShows: $path
+        case .library: $libraryPath
+        case .search: $searchPath
+        }
+    }
+
+    private func screen(for item: LibraryTab) -> some View {
+        NavigationStack(path: navigationPath(for: item)) {
+            tabRoot(for: item)
+                .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
+                .navigationDestination(for: PlayerEpisodeDestination.self) { destination in
+                    EpisodeDetails(episode: destination.episode, source: destination.source)
+                }
+        }
+    }
+
+    @ViewBuilder private func tabRoot(for item: LibraryTab) -> some View {
         switch item {
         case .allShows:
-            NavigationStack(path: $path) {
-                Group {
-                    if library.ready { allShowsGrid }
-                    else { catalogLoading }
-                }
-                .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
-                            prompt: "Search show titles")
-                .leadingTitle(Text(item.title))
-                .toolbar { profileToolbarItem }
-                .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
+            Group {
+                if library.ready { allShowsGrid }
+                else { catalogLoading }
             }
+            .searchable(text: $showSearch, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search show titles")
+            .tabRootTitle(item.title)
+            .toolbar { profileToolbarItem }
         case .library:
-            NavigationStack(path: $libraryPath) {
-                LibraryHome(archiveError: archiveError, retryArchive: { archiveRetry += 1 },
-                            signIn: { login = true }, browseShows: browseShows, profileButton: profileButton) { libraryPath.append($0) }
-                    .navigationDestination(for: LibrarySection.self) { section in
-                        Group {
-                            switch section {
-                            case .following: followedShowsGrid
-                            case .saved, .downloaded: CollectionEpisodes(section: section) { libraryPath.append($0) }
-                            }
-                        }.leadingTitle(Text(section.title))
-                    }
-                    .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
-            }
-        case .search:
-            NavigationStack(path: $searchPath) {
-                Group {
-                    if library.ready { EpisodeSearchScreen(query: $catalogSearch) { searchPath.append($0) } }
-                    else { catalogLoading }
+            LibraryHome(archiveError: archiveError, retryArchive: { archiveRetry += 1 },
+                        signIn: { login = true }, browseShows: browseShows, profileButton: profileButton,
+                        openSection: { libraryPath.append($0) }, openShow: { libraryPath.append($0) })
+                .navigationDestination(for: LibrarySection.self) { section in
+                    Group {
+                        switch section {
+                        case .following: followedShowsGrid
+                        case .saved, .downloaded: CollectionEpisodes(section: section) { libraryPath.append($0) }
+                        }
+                    }.leadingTitle(Text(section.title))
                 }
-                .leadingTitle(Text(item.title))
-                .toolbar { profileToolbarItem }
-                .navigationDestination(for: Show.self) { ShowScreen(show: $0, signIn: { login = true }) }
+        case .search:
+            Group {
+                if library.ready { EpisodeSearchScreen(query: $catalogSearch) { searchPath.append($0) } }
+                else { catalogLoading }
             }
+            .tabRootTitle(item.title)
+            .toolbar { profileToolbarItem }
         }
     }
 
@@ -151,6 +212,7 @@ struct LibraryScreen: View {
             else { login = true }
         } label: {
             Image(systemName: library.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle.badge.plus")
+                .foregroundStyle(.blue)
         }
         .accessibilityLabel(library.isSignedIn ? Text("Libo/Libo Account") : Text("Sign in with Telegram"))
     }
@@ -189,7 +251,7 @@ struct LibraryScreen: View {
     }
 
     private func browseShows() {
-        path.removeAll()
+        path = NavigationPath()
         tab = .allShows
     }
 

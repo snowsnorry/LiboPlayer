@@ -1,5 +1,28 @@
 import SwiftUI
 
+struct AccountPanelHeader: View {
+    let title: LocalizedStringKey
+    var closeDisabled = false
+    let close: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title).font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            Button(action: close) {
+                Image(systemName: "xmark").font(.subheadline.bold())
+                    .frame(width: 30, height: 30).background(.quaternary, in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Close")
+            .disabled(closeDisabled)
+        }
+    }
+}
+
 private struct AccountPanelHeight: CustomPresentationDetent {
     static func height(in context: Context) -> CGFloat? {
         context.dynamicTypeSize.isAccessibilitySize ? context.maxDetentValue : min(260, context.maxDetentValue)
@@ -14,20 +37,7 @@ struct AccountPanel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Libo/Libo Account")
-                    .font(.title2.bold())
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.subheadline.bold())
-                        .frame(width: 30, height: 30).background(.quaternary, in: Circle())
-                        .frame(width: 44, height: 44)
-                }
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Close")
-                .disabled(closeDisabled)
-            }
+            AccountPanelHeader(title: "Libo/Libo Account", closeDisabled: closeDisabled, close: close)
             content()
         }
         .padding(.horizontal, 24)

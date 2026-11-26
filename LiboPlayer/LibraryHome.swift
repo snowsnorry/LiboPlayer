@@ -70,6 +70,7 @@ struct LibraryHome<ProfileButton: View>: View {
     let signIn: () -> Void
     let browseShows: () -> Void
     let profileButton: ProfileButton
+    let openSection: (LibrarySection) -> Void
     let openShow: (Show) -> Void
 
     private var hasEpisodes: Bool {
@@ -78,8 +79,30 @@ struct LibraryHome<ProfileButton: View>: View {
     }
 
     var body: some View {
+        Group {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                PadLibraryFeed(episodes: hasEpisodes ? library.feed : [], query: $query,
+                               openSection: openSection, openShow: openShow, openDetails: { selectedEpisode = $0 }) {
+                    feedStatus
+                }
+                .navigationTitle(Text(verbatim: ""))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { profileButton } }
+            } else {
+                phoneHome
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable { await library.refresh() }
+        .navigationDestination(item: $selectedEpisode) { episode in
+            EpisodeDetails(episode: episode, source: .latestEpisodes)
+        }
+        .onChange(of: library.account) { query = EpisodeQuery() }
+    }
+
+    private var phoneHome: some View {
         let compact = hasEpisodes && titlesMeet
-        List {
+        return List {
             ForEach(LibrarySection.allCases, id: \.self) { section in
                 NavigationLink(value: section) {
                     Label {
@@ -153,12 +176,6 @@ struct LibraryHome<ProfileButton: View>: View {
                 }
             }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable { await library.refresh() }
-        .navigationDestination(item: $selectedEpisode) { episode in
-            EpisodeDetails(episode: episode, source: .latestEpisodes)
-        }
-        .onChange(of: library.account) { query = EpisodeQuery() }
         .leadingTitle(
             // Reserve a single title slot so the text slides vertically without shifting sideways.
             Text("Latest Episodes").hidden()
@@ -232,8 +249,9 @@ private struct SearchBarBounds: PreferenceKey {
     }
 }
 
-private struct EpisodeSearchBar: UIViewRepresentable {
+struct EpisodeSearchBar: UIViewRepresentable {
     @Binding var text: String
+    var editingChanged: ((Bool) -> Void)?
     @Environment(\.locale) private var locale
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
@@ -248,14 +266,19 @@ private struct EpisodeSearchBar: UIViewRepresentable {
 
     func updateUIView(_ bar: UISearchBar, context: Context) {
         context.coordinator.text = $text
+        context.coordinator.editingChanged = editingChanged
         bar.placeholder = String(localized: "Search episode titles", locale: locale)
         if bar.text != text { bar.text = text }
     }
 
     final class Coordinator: NSObject, UISearchBarDelegate {
         var text: Binding<String>
+        var editingChanged: ((Bool) -> Void)?
 
         init(text: Binding<String>) { self.text = text }
+
+        func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) { editingChanged?(true) }
+        func searchBarTextDidEndEditing(_ searchBar: UISearchBar) { editingChanged?(false) }
 
         func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
             text.wrappedValue = searchText
@@ -274,8 +297,7 @@ struct ShowGrid: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        let column = GridItem(.flexible(), spacing: 0, alignment: .top)
-        LazyVGrid(columns: typeSize.isAccessibilitySize ? [column] : [column, column], alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
             ForEach(shows) { show in
                 Button { openShow(show) } label: {
                     tile(for: show)
@@ -302,6 +324,15 @@ struct ShowGrid: View {
             }
         }
         .padding(.horizontal, 10)
+    }
+
+    private var columns: [GridItem] {
+        let column = GridItem(.flexible(), spacing: 0, alignment: .top)
+        if typeSize.isAccessibilitySize { return [column] }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return [GridItem(.adaptive(minimum: 155), spacing: 0, alignment: .top)]
+        }
+        return [column, column]
     }
 
     private func tile(for show: Show) -> some View {
